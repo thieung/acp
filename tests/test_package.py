@@ -87,7 +87,7 @@ def test_web_serves_the_guide(home, plane):
         res = conn.getresponse()
         res.read()
         assert (res.status, res.getheader("Location")) == (301, "/guide/")
-        for path, kind in (("/guide/", "text/html"), ("/guide/fonts/archivo-latin.woff2", "font/woff2")):
+        for path, kind in (("/guide/", "text/html"), ("/guide/fonts/barlow-400-latin.woff2", "font/woff2")):
             conn.request("GET", path)
             res = conn.getresponse()
             assert res.status == 200 and res.getheader("Content-Type").startswith(kind), path

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The guide is redesigned around a track-plan diagram of a fleet sync, set in Barlow and
+  Barlow Condensed (self-hosted, with Vietnamese subsets), with an output pane under every step.
+
 ## 0.1.0 — 2026-10-26
 
 - First release as a package, extracted from `scripts/acp` of the agent-control-plane repo.
