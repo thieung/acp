@@ -13,6 +13,8 @@
   acp made.
 - Dropped: the automatic fix agent, the `acp fix` commands and the MCP tools that wrote
   changes.
+- The guide in `site/` describes the Go binary: install from a release, `acp scan` and
+  `acp explain`, the preview-first dashboard and the read-only MCP tools.
 - The guide is redesigned around a track-plan diagram of a fleet sync, set in Barlow and
   Barlow Condensed (self-hosted, with Vietnamese subsets), with an output pane under every step.
 

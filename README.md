@@ -108,5 +108,4 @@ CI runs the tests on Ubuntu and macOS, then tries the installer. Pushing a tag `
 2. It writes `checksums.txt` and `install.sh`.
 3. It creates the GitHub Release. A tag with a `-` in it is a prerelease.
 
-`site/index.html` is the guide written for the earlier Python package; the Go dashboard does
-not serve it.
+`site/index.html` is the bilingual guide (English and Vietnamese); open it in a browser.
