@@ -1,6 +1,0 @@
-{
-  "schemaVersion": 1,
-  "repos": {
-    "my-app": "/absolute/path/to/my-app"
-  }
-}

@@ -1,0 +1,36 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go test ./...
+      - run: sh scripts/build-release.sh "$TAG"
+        env:
+          TAG: ${{ github.ref_name }}
+      - run: sh scripts/tests/install-smoke.sh
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -- --title "acp $TAG" --generate-notes --verify-tag
+          case $TAG in *-*) set -- "$@" --prerelease ;; esac
+          gh release create "$TAG" "$@" dist/*.tar.gz dist/checksums.txt install.sh
