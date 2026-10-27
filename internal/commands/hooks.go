@@ -26,8 +26,7 @@ func hookBinary() (string, error) {
 	if !filepath.IsAbs(path) {
 		return "", fail("ACP_BIN=%s is not an absolute path", path)
 	}
-	real := resolve(path)
-	if fi, err := os.Stat(real); err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm()&0o111 == 0 {
+	if !core.IsExecutable(resolve(path)) {
 		return "", fail("%s is not an executable file", path)
 	}
 	if err := lastingBinary(path); err != nil {
@@ -37,18 +36,25 @@ func hookBinary() (string, error) {
 }
 
 // lastingBinary refuses an acp path that will vanish, checked as given and resolved: a temporary
-// folder or the Go build cache, a mounted disk image or volume, or the copy macOS runs a quarantined
-// app from (App Translocation). Hooks, links and MCP entries wired to it would break once it is gone.
+// folder or the Go build cache, or acp inside an app bundle that is not in /Applications or
+// ~/Applications (a mounted disk image, the copy macOS runs a quarantined app from, or an app left
+// in Downloads that gets tidied away). Hooks, links and MCP entries wired to it would break once it
+// is gone. A plain binary on another volume is fine: tools and homes may live there.
 func lastingBinary(path string) error {
 	temp := []string{os.TempDir(), resolve(os.TempDir())}
+	home := core.HomeDir()
+	apps := []string{"/Applications", filepath.Join(home, "Applications"), filepath.Join(resolve(home), "Applications")}
 	why := func(p string) string {
+		inApp := strings.Contains(p, ".app/Contents/")
 		switch {
-		case strings.HasPrefix(p, "/Volumes/"):
+		case inApp && strings.HasPrefix(p, "/Volumes/") && !core.WithinAny(p, apps): // a home on a second volume
 			return "on a disk image or a removable volume"
-		case strings.Contains(p, "/AppTranslocation/"):
+		case inApp && strings.Contains(p, "/AppTranslocation/"):
 			return "a copy macOS runs from a temporary folder"
 		case core.WithinAny(p, temp) || strings.Contains(p, "/go-build"):
 			return "a temporary build"
+		case inApp && !core.WithinAny(p, apps):
+			return "in an app outside the Applications folder"
 		}
 		return ""
 	}

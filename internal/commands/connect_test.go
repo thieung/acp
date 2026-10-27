@@ -196,3 +196,28 @@ func TestConnectRefusesAPathThatVanishes(t *testing.T) {
 		t.Fatal("a refused connect wrote ~/.claude.json")
 	}
 }
+
+func TestConnectFindsClaudesLocalInstall(t *testing.T) {
+	f := testkit.New(t)
+	t.Setenv("ACP_CLAUDE", "")
+	t.Setenv("ACP_CODEX", "")
+	t.Setenv("PATH", filepath.Join(f.Base, "empty"))
+	local := filepath.Join(f.Home, ".claude/local/claude")
+	f.Executable(local, testkit.FakeClaude)
+	f.Executable(filepath.Join(f.Home, ".claude/local/codex"), testkit.FakeCodex)
+	for _, c := range agentCLIs {
+		want := ""
+		if c.name == "claude" {
+			want = local
+		}
+		if got := c.find(); got != want {
+			t.Errorf("%s: found %q, want %q", c.name, got, want)
+		}
+	}
+	// ~/.local/bin comes first.
+	user := filepath.Join(f.Home, ".local/bin/claude")
+	f.Executable(user, testkit.FakeClaude)
+	if got := agentCLIs[0].find(); got != user {
+		t.Errorf("claude: found %q, want %q", got, user)
+	}
+}

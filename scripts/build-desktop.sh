@@ -8,7 +8,8 @@
 #   ACP_NOTARY_KEY_FILE, ACP_NOTARY_KEY_ID, ACP_NOTARY_ISSUER   App Store Connect API key (notarytool)
 #   ACP_SPARKLE_FEED_URL, ACP_SPARKLE_PUBLIC_KEY                https appcast URL + EdDSA public key
 #   ACP_SPARKLE_PRIVATE_KEY_FILE  EdDSA private key: writes dist/desktop/appcast/appcast.xml
-#   ACP_SPARKLE_DOWNLOAD_URL_PREFIX  where the DMG is served (default: this tag's GitHub release)
+#   ACP_SPARKLE_DOWNLOAD_URL_PREFIX  https folder the DMG is served from, required with the private
+#                                    key: the appcast's download link must open without a GitHub login
 set -eu
 
 tag=${1:?usage: scripts/build-desktop.sh TAG}
@@ -36,8 +37,16 @@ if [ -n "${ACP_NOTARY_KEY_FILE:-}" ] && [ -n "${ACP_NOTARY_KEY_ID:-}" ] && [ -n 
   [ -n "$identity" ] || fail "notarization needs ACP_DEVELOPER_ID"
   notary=1
 fi
-if [ -n "${ACP_SPARKLE_PRIVATE_KEY_FILE:-}" ] && [ -z "$feed" ]; then
-  fail "ACP_SPARKLE_PRIVATE_KEY_FILE is set but the app has no feed (ACP_SPARKLE_FEED_URL)"
+prefix=${ACP_SPARKLE_DOWNLOAD_URL_PREFIX:-}
+if [ -n "${ACP_SPARKLE_PRIVATE_KEY_FILE:-}" ]; then
+  [ -n "$feed" ] || fail "ACP_SPARKLE_PRIVATE_KEY_FILE is set but the app has no feed (ACP_SPARKLE_FEED_URL)"
+  case $prefix in
+    https://?*) ;;
+    '') fail "ACP_SPARKLE_PRIVATE_KEY_FILE is set but ACP_SPARKLE_DOWNLOAD_URL_PREFIX is empty; Sparkle needs a public https folder for the DMG" ;;
+    *) fail "ACP_SPARKLE_DOWNLOAD_URL_PREFIX must be https, got $prefix" ;;
+  esac
+  # generate_appcast resolves file names against it, so without the slash it drops the last segment.
+  prefix=${prefix%/}/
 fi
 
 # Only dist/desktop is ours: the CLI archives in dist/ stay.
@@ -116,7 +125,6 @@ fi
 if [ -n "${ACP_SPARKLE_PRIVATE_KEY_FILE:-}" ]; then
   mkdir -p "$out/appcast"
   cp "$dmg" "$out/appcast/"
-  prefix=${ACP_SPARKLE_DOWNLOAD_URL_PREFIX:-https://github.com/thieung/acp/releases/download/$tag/}
   "$root/desktop/.build/artifacts/sparkle/Sparkle/bin/generate_appcast" \
     --ed-key-file "$ACP_SPARKLE_PRIVATE_KEY_FILE" --download-url-prefix "$prefix" "$out/appcast"
   rm "$out/appcast/acp-$version.dmg"

@@ -13,26 +13,43 @@ import (
 
 // AkBin finds the AgentKit CLI: ACP_AK, then PATH, then $AK_INSTALL_DIR/ak or ~/.local/bin/ak.
 func AkBin() (string, error) {
-	if p := os.Getenv("ACP_AK"); p != "" {
-		if isExecutable(p) {
-			return p, nil
-		}
-		return "", fmt.Errorf("ak is not installed (ACP_AK=%s is not an executable file)", p)
-	}
-	if p, err := exec.LookPath("ak"); err == nil {
-		return p, nil
-	}
 	dir := os.Getenv("AK_INSTALL_DIR")
 	if dir == "" {
 		dir = filepath.Join(HomeDir(), ".local", "bin")
 	}
-	if p := filepath.Join(dir, "ak"); isExecutable(p) {
+	p, fromEnv := FindCLI("ACP_AK", "ak", dir)
+	switch {
+	case p != "":
 		return p, nil
+	case fromEnv:
+		return "", fmt.Errorf("ak is not installed (ACP_AK=%s is not an executable file)", os.Getenv("ACP_AK"))
 	}
 	return "", errors.New("ak is not installed: not on PATH or in ~/.local/bin (see `acp setup`)")
 }
 
-func isExecutable(p string) bool {
+// FindCLI finds a command-line program: the file envVar names when it is set (nothing else is
+// tried then), else name on PATH, else name in each of dirs in order. It returns "" when none is
+// an executable file; fromEnv reports that envVar was set, so a caller can name it in its error.
+func FindCLI(envVar, name string, dirs ...string) (path string, fromEnv bool) {
+	if p := os.Getenv(envVar); p != "" {
+		if IsExecutable(p) {
+			return p, true
+		}
+		return "", true
+	}
+	if p, err := exec.LookPath(name); err == nil {
+		return p, false
+	}
+	for _, dir := range dirs {
+		if p := filepath.Join(dir, name); IsExecutable(p) {
+			return p, false
+		}
+	}
+	return "", false
+}
+
+// IsExecutable reports whether p is a regular file someone may execute (symlinks followed).
+func IsExecutable(p string) bool {
 	fi, err := os.Stat(p)
 	return err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0
 }

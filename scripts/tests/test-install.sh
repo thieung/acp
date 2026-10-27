@@ -52,6 +52,13 @@ grep -q 'managed by acp.app' "$work/out" || fail "app link message: $(cat "$work
 [ "$(readlink "$work/bin/acp")" = "$helper" ] || fail "app link changed"
 [ "$(cat "$helper")" = "$(cat "$dist/checksums.txt")" ] || fail "app binary changed"
 
+# The app was deleted: its link dangles and is replaced.
+rm -rf "$work/Applications/acp.app"
+install_acp "file://$dist" || fail "dangling app link: $(cat "$work/out")"
+grep -q 'acp.app, which is gone' "$work/out" || fail "dangling app link not announced: $(cat "$work/out")"
+[ ! -L "$work/bin/acp" ] || fail "dangling app link left in place"
+"$work/bin/acp" --version | grep -q 'acp v' || fail "binary over a dangling app link does not run"
+
 rm "$work/bin/acp"
 ln -s /bin/sh "$work/bin/acp"
 install_acp "file://$dist" && fail "replaced a foreign link"

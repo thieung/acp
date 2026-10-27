@@ -7,9 +7,12 @@ let appAllowList = ["HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TM
 /// Variables taken from the user's login shell, so acp sees the same control plane, tools and agent
 /// homes as in a terminal. The agent homes are the ones core.GlobalHomes reads; claude and codex,
 /// which acp starts, read CLAUDE_CONFIG_DIR and CODEX_HOME too, so without them the app would write
-/// a config the user's own claude never reads.
+/// a config the user's own claude never reads. The proxy and CA variables let ak, claude and codex
+/// reach the network behind a corporate proxy or TLS inspection, as they do in a terminal.
 let shellKeys = ["PATH", "ACP_ROOT", "XDG_CONFIG_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR",
-                 "AGENTKIT_OMP_HOME", "OMP_HOME", "PI_AK_AGENT_DIR", "PI_OMP_AGENT_DIR"]
+                 "AGENTKIT_OMP_HOME", "OMP_HOME", "PI_AK_AGENT_DIR", "PI_OMP_AGENT_DIR",
+                 "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "ALL_PROXY", "https_proxy", "http_proxy", "no_proxy", "all_proxy",
+                 "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS"]
 
 /// shellProbeMarker starts the probe's output; anything a shell's startup files print before it is noise.
 public let shellProbeMarker = "__acp_env__"

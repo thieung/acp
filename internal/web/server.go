@@ -3,6 +3,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -20,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/thieung/acp/internal/core"
 	"github.com/thieung/acp/internal/scan"
@@ -85,6 +88,14 @@ func (s *Server) Code() string {
 	return s.code
 }
 
+// Changing reports whether a change or a sign-in holds the lock. Previews and scans do not count:
+// stopping them loses nothing.
+func (s *Server) Changing() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.busy
+}
+
 // Running reports whether an operation or a sign-in is still running.
 func (s *Server) Running() bool {
 	s.mu.Lock()
@@ -138,6 +149,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/run", s.start)
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("GET /api/ops/{id}", s.op)
+	mux.HandleFunc("GET /api/running", s.running)
 	mux.HandleFunc("GET /", s.static)
 	return s.guard(mux)
 }
@@ -333,19 +345,24 @@ var loginTimeout = 2 * time.Minute
 
 // login signs in to AgentKit with an API key. It has nothing to preview, so it needs no digest,
 // but it still waits its turn behind any other change. The key reaches acp only on stdin: it is
-// never in argv, an operation or a session, and its bytes are cleared once acp has run.
+// never in argv, an operation or a session. Every copy this handler makes (the body, the raw JSON
+// value, the decoded key) is a byte slice it clears once acp has run; buffers inside net/http and
+// the kernel are out of its reach, so the wiping is best effort.
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
+	body, err := readBody(r.Body)
 	defer clear(body)
 	var in struct {
-		Key string `json:"key"`
+		Key json.RawMessage `json:"key"`
 	}
-	if err != nil || json.Unmarshal(body, &in) != nil {
+	err = errors.Join(err, json.Unmarshal(body, &in))
+	defer clear(in.Key)
+	decoded, ok := jsonString(in.Key)
+	defer clear(decoded)
+	if err != nil || !ok {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
-	key := []byte(strings.TrimSpace(in.Key))
-	defer clear(key)
+	key := bytes.TrimSpace(decoded)
 	if len(key) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nhập API key của AgentKit"})
 		return
@@ -385,6 +402,113 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, env)
+}
+
+// readBody reads a request body into one buffer sized for the largest body the guard allows, so
+// no outgrown copy of a secret is left behind uncleared.
+func readBody(r io.Reader) ([]byte, error) {
+	buf := make([]byte, maxBody+1)
+	n := 0
+	for {
+		m, err := r.Read(buf[n:])
+		n += m
+		switch {
+		case err == io.EOF:
+			return buf[:n], nil
+		case err != nil:
+			return buf[:n], err
+		case n == len(buf):
+			return buf[:n], errors.New("request body too large")
+		}
+	}
+}
+
+// jsonString decodes a JSON string value into a new byte slice the caller can clear; the standard
+// decoder only yields Go strings, which cannot be. Missing or null decodes as empty. The result is
+// never longer than raw, so it is allocated once. Lone UTF-16 surrogates and invalid UTF-8 are
+// refused rather than replaced: an API key has neither.
+func jsonString(raw []byte) ([]byte, bool) {
+	if raw == nil || bytes.Equal(raw, []byte("null")) {
+		return nil, true
+	}
+	if len(raw) < 2 || raw[0] != '"' || raw[len(raw)-1] != '"' {
+		return nil, false
+	}
+	in := raw[1 : len(raw)-1]
+	out := make([]byte, 0, len(in))
+	bad := func() ([]byte, bool) { clear(out[:cap(out)]); return nil, false }
+	for i := 0; i < len(in); i++ {
+		c := in[i]
+		if c < 0x20 || c == '"' {
+			return bad()
+		}
+		if c != '\\' {
+			out = append(out, c)
+			continue
+		}
+		if i++; i == len(in) {
+			return bad()
+		}
+		switch in[i] {
+		case '"', '\\', '/':
+			out = append(out, in[i])
+		case 'b':
+			out = append(out, '\b')
+		case 'f':
+			out = append(out, '\f')
+		case 'n':
+			out = append(out, '\n')
+		case 'r':
+			out = append(out, '\r')
+		case 't':
+			out = append(out, '\t')
+		case 'u':
+			r := hex4(in[i+1:])
+			i += 4
+			if utf16.IsSurrogate(r) {
+				if i+2 >= len(in) || in[i+1] != '\\' || in[i+2] != 'u' {
+					return bad()
+				}
+				r = utf16.DecodeRune(r, hex4(in[i+3:]))
+				i += 6
+				if r == utf8.RuneError {
+					return bad()
+				}
+			}
+			if r < 0 {
+				return bad()
+			}
+			out = utf8.AppendRune(out, r)
+		default:
+			return bad()
+		}
+	}
+	if !utf8.Valid(out) {
+		return bad()
+	}
+	return out, true
+}
+
+// hex4 is the value of four hex digits at the start of b, or -1.
+func hex4(b []byte) rune {
+	if len(b) < 4 {
+		return -1
+	}
+	var r rune
+	for _, c := range b[:4] {
+		switch {
+		case '0' <= c && c <= '9':
+			c -= '0'
+		case 'a' <= c && c <= 'f':
+			c -= 'a' - 10
+		case 'A' <= c && c <= 'F':
+			c -= 'A' - 10
+		default:
+			return -1
+		}
+		r = r<<4 | rune(c)
+	}
+	return r
 }
 
 // ------------------------------------------------------------------ runs
@@ -515,6 +639,12 @@ func (s *Server) launch(kind string, argv []string, tok, key string, done func()
 		}
 	}()
 	return o.ID
+}
+
+// running answers whether a change or a sign-in is still running, so the desktop app can ask
+// before it quits.
+func (s *Server) running(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{"running": s.Changing()})
 }
 
 func (s *Server) op(w http.ResponseWriter, r *http.Request) {

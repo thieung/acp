@@ -142,7 +142,8 @@ final class AcpProcess {
         DispatchQueue.main.async { self.onFailure?(message, text) }
     }
 
-    /// probeLoginShell asks the user's login shell for shellKeys (PATH, ACP_ROOT, the agent homes), so acp
+    /// probeLoginShell asks the user's login shell for shellKeys (PATH, ACP_ROOT, the agent homes,
+    /// the proxy and CA settings), so acp
     /// sees what it sees in a terminal. The shell itself gets only the allow-listed variables: a
     /// value planted in the app's environment must not come back through it.
     private func probeLoginShell(_ appEnv: [String: String]) -> [String: String] {

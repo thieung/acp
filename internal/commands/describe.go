@@ -45,9 +45,10 @@ var contracts = []contract{
 	{name: "setup", summary: "ak binary, sign-in, doctor and pins", network: true},
 	{name: "setup install-ak", summary: "download and run AgentKit's official verified installer", mutation: true,
 		risk: "high", preview: "default; plan until --apply", confirm: "--apply", network: true},
-	{name: "setup login", summary: "sign in with an AgentKit API key on stdin, or `ak onboard` in a terminal",
-		mutation: true, risk: "medium", preview: "none: an API key sign-in has nothing to preview; ak checks the key",
-		network: true},
+	{name: "setup login", summary: "sign in with `ak onboard` in a terminal (interactive); " +
+		"--api-key-stdin is the non-interactive form, reading an AgentKit API key from stdin",
+		mutation: true, risk: "medium", preview: "interactive; ak onboard confirms each step " +
+			"(--api-key-stdin has nothing to preview; ak checks the key)", interactive: true, network: true},
 	{name: "setup link-cli", summary: "point ~/.local/bin/acp at this acp binary, replacing only another acp (backed up)",
 		mutation: true, risk: "low", preview: "default; preview until --apply", confirm: "--apply"},
 	{name: "setup install-clt", summary: "open Apple's installer for the Command Line Tools (macOS; git needs them)",

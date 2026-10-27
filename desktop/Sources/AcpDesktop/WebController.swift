@@ -28,7 +28,6 @@ final class WebController: NSObject, WKNavigationDelegate, WKUIDelegate, WKScrip
         // A suffix, not a replacement: the dashboard looks for "acp-desktop/" to show in-app copy.
         config.applicationNameForUserAgent = "acp-desktop/\(version)"
         let scripts = WKUserContentController()
-        scripts.addUserScript(WKUserScript(source: runningChangeScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = scripts
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
@@ -74,12 +73,46 @@ final class WebController: NSObject, WKNavigationDelegate, WKUIDelegate, WKScrip
         process.restart()
     }
 
-    /// isChangeRunning asks the page whether a change it applied is still running.
-    func isChangeRunning(_ done: @escaping (Bool) -> Void) {
-        guard port != 0, !webView.isHidden else { return done(false) }
-        webView.evaluateJavaScript("window.__acpDesktopRunning === true") { value, _ in
-            done((value as? Bool) ?? false)
+    /// queryRunning asks acp web (`GET /api/running`, with the page's session token) whether a
+    /// change or a sign-in is running. It answers "running", "idle" or why it could not tell; with
+    /// no dashboard loaded it answers at once. A hung page may never answer: callers time out.
+    func queryRunning(_ done: @escaping (String) -> Void) {
+        guard port != 0, !webView.isHidden, let url = webView.url, classify(url, port: port) == .dashboard else {
+            return done("no dashboard")
         }
+        webView.callAsyncJavaScript(runningQueryBody, arguments: [:], in: nil, in: .defaultClient) { result in
+            switch result {
+            case .success(let v): done((v as? String) ?? "unexpected answer")
+            case .failure(let e): done("script failed: \(e.localizedDescription)")
+            }
+        }
+    }
+
+    /// whenSignedIn polls the page (signedInCheck) until it has a session and shows the dashboard,
+    /// for up to `timeout`. It calls `done` once, with nil on success or what was still missing.
+    func whenSignedIn(timeout: TimeInterval, _ done: @escaping (String?) -> Void) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var finished = false
+        var last = "the page never answered"
+        func finish(_ missing: String?) {
+            guard !finished else { return }
+            finished = true
+            done(missing)
+        }
+        func poll() {
+            guard !finished else { return }
+            webView.evaluateJavaScript(signedInCheck, in: nil, in: .defaultClient) { result in
+                switch result {
+                case .success(let v): last = (v as? String) ?? "unexpected answer"
+                case .failure(let e): last = "script failed: \(e.localizedDescription)"
+                }
+                if last == "ok" { return finish(nil) }
+                if Date() >= deadline { return finish(last) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: poll)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout + 1) { finish(last) }
+        poll()
     }
 
     // MARK: - navigation
@@ -237,34 +270,3 @@ private final class WeakScriptHandler: NSObject, WKScriptMessageHandler {
         target?.userContentController(controller, didReceive: message)
     }
 }
-
-/// runningChangeScript lets the app ask, before quitting, whether a change is still running. It
-/// watches the dashboard's own requests: an apply (POST /api/run with a digest) that was accepted
-/// counts until its /api/ops/<id> poll says done or fails. It reads responses, never changes them.
-private let runningChangeScript = """
-(() => {
-  const running = new Set();
-  const realFetch = window.fetch.bind(window);
-  window.fetch = async (input, init) => {
-    const res = await realFetch(input, init);
-    try {
-      const path = new URL(typeof input === 'string' ? input : input.url, location.href).pathname;
-      if (path === '/api/run' && res.status === 202) {
-        const body = init && typeof init.body === 'string' ? JSON.parse(init.body) : {};
-        if (body.digest) {
-          const r = await res.clone().json();
-          if (r && r.op) running.add(String(r.op));
-        }
-      } else if (path.startsWith('/api/ops/')) {
-        const id = decodeURIComponent(path.slice('/api/ops/'.length));
-        if (running.has(id)) {
-          const o = res.ok ? await res.clone().json() : null;
-          if (!o || o.state === 'done') running.delete(id);
-        }
-      }
-    } catch (_) { /* never break the page */ }
-    return res;
-  };
-  Object.defineProperty(window, '__acpDesktopRunning', { get: () => running.size > 0 });
-})();
-"""

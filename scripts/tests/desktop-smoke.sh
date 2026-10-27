@@ -109,8 +109,9 @@ done
 wait "$web_pid" || fail "acp web exited with an error: $(cat "$work/web.err")"
 web_pid=
 
-# The real app, in smoke mode: it loads the dashboard once and exits 0. The app hands acp the
-# login shell's PATH and ACP_ROOT, so HOME and SHELL point into the throwaway home too.
+# The real app, in smoke mode: it loads the dashboard, waits for the page to sign in (a session
+# token and the signed-in dashboard), asks GET /api/running with that token, and exits 0. The app
+# hands acp the login shell's PATH and ACP_ROOT, so HOME and SHELL point into the throwaway home too.
 printf 'export ACP_ROOT=%s\n' "$work/home/agent-control-plane" >"$work/home/.profile"
 env -i HOME="$work/home" USER="${USER:-smoke}" TMPDIR="$work" SHELL=/bin/sh PATH=/usr/bin:/bin \
   ACP_DESKTOP_SMOKE=1 "$shell_bin" >"$work/app.out" 2>"$work/app.err" &
@@ -128,6 +129,6 @@ rc=0
 wait "$app_pid" || rc=$?
 if grep -q 'Library not loaded' "$work/app.err"; then fail "the app cannot load a library: $(cat "$work/app.err")"; fi
 [ "$rc" = 0 ] || fail "the app exited $rc: $(cat "$work/app.out" "$work/app.err")"
-grep -q '^smoke: loaded http://127.0.0.1:[0-9]*/' "$work/app.out" || fail "no 'smoke: loaded' line: $(cat "$work/app.out")"
+grep -q '^smoke: signed in http://127.0.0.1:[0-9]*/' "$work/app.out" || fail "no 'smoke: signed in' line: $(cat "$work/app.out")"
 if grep -q 'code=' "$work/app.out"; then fail "the smoke line carries the one-time code"; fi
 echo "desktop smoke: ok"

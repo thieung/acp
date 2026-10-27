@@ -8,9 +8,15 @@ Code and Codex. The shell holds no business logic:
 3. It loads that URL in a WKWebView. Everything you see is the same dashboard as `acp web`.
 
 Children get an allow-listed environment: `HOME`, `USER`, `LANG`… from the app, and `PATH`,
-`ACP_ROOT`, `XDG_CONFIG_HOME` from your login shell. `ACP_*`, `AK_*`, `AGENTKIT_*` and `DYLD_*`
-from launchd never reach acp. acp web stops when the app quits or crashes, because the app holds
-its stdin.
+`ACP_ROOT`, `XDG_CONFIG_HOME`, the agent homes (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`…), the proxy
+variables (`HTTPS_PROXY`, `NO_PROXY`… in both cases) and `SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS`
+from your login shell. `ACP_*`, `AK_*`, `AGENTKIT_*` and `DYLD_*` from launchd never reach acp.
+acp web stops when the app quits or crashes, because the app holds its stdin.
+
+Quitting closes acp web's stdin, waits up to 10 s for it to exit, then stops it. Before that the
+app asks acp web, with the page's session token, whether a change or a sign-in is running
+(`GET /api/running`); if one is, you choose between staying and quitting. A dashboard that does
+not answer within 2 s counts as nothing running.
 
 ## Build
 
@@ -32,8 +38,10 @@ Gatekeeper blocks it elsewhere, so releases attach only a signed and notarized D
 
 The smoke test checks both architectures, the rpath, the signature and `acp --version`. It also
 drives the Go contract in a throwaway home (init, web, `GET /` with its CSP, `POST /api/session`).
-Then it launches the app with `ACP_DESKTOP_SMOKE=1`, which prints `smoke: loaded <url>` after the
-dashboard's first load and exits 0.
+Then it launches the app with `ACP_DESKTOP_SMOKE=1`. After the dashboard's first load the app
+waits up to 15 s for the page to trade its one-time code for a session (a token in
+sessionStorage) and draw the signed-in dashboard, then asks `GET /api/running` with that token.
+It prints `smoke: signed in <url>` and exits 0, or prints what was missing and exits 1.
 
 ## Run during development
 
@@ -67,15 +75,20 @@ Locally, the same build takes `ACP_DEVELOPER_ID`, `ACP_NOTARY_KEY_FILE`, `ACP_NO
 only when both are set and the feed is https.
 
 When the private key is set, `generate_appcast` writes `dist/desktop/appcast/appcast.xml` for
-this release. Its download links point at the tag's GitHub release
-(`ACP_SPARKLE_DOWNLOAD_URL_PREFIX` overrides that). The release job attaches `appcast.xml` to the
-release; host it, merged with the earlier entries, at the feed URL.
+this release. Its download links start with `ACP_SPARKLE_DOWNLOAD_URL_PREFIX`, which is then
+required: a public https location that serves the DMG without signing in (this repository's
+releases are private, so they cannot be it). In CI it comes from the repository variable of the
+same name. The release job attaches `appcast.xml` to the release; host it, merged with the
+earlier entries, at the feed URL.
 
 ## Install and remove
 
-Open the DMG and drag `acp.app` to Applications. Run from Downloads, a disk image or a
-translocated copy, the app offers to move itself there first. acp refuses to link the CLI or
-register MCP to a path that vanishes.
+Open the DMG and drag `acp.app` to Applications. acp refuses to link the CLI, install hooks or
+register MCP to the binary inside an `acp.app` outside `/Applications` or `~/Applications`
+(Downloads, a disk image, a translocated copy), so run from anywhere else the app offers to move
+itself to `/Applications` first. If an `acp.app` is already there, an older one is moved to the
+Trash and replaced, and the alert says so; one as new or newer is kept, and the app offers to
+open it instead.
 
 The dashboard can then do three things, each previewed first:
 - Sign in to AgentKit with an API key. The key goes to `ak` on stdin only.

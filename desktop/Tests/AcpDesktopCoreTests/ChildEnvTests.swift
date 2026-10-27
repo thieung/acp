@@ -65,10 +65,37 @@ final class ChildEnvTests: XCTestCase {
         XCTAssertNil(childEnvironment(appEnv: ["CLAUDE_CONFIG_DIR": "/tmp/launchd"], loginShell: [:])["CLAUDE_CONFIG_DIR"])
     }
 
+    /// Behind a corporate proxy or TLS inspection, ak, claude and codex reach the network only with the
+    /// proxy and CA variables the terminal has; launchd never sets them for a Finder-started app.
+    let networkKeys = ["HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "ALL_PROXY", "https_proxy", "http_proxy", "no_proxy",
+                       "all_proxy", "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS"]
+
+    func testTakesProxyAndCertificatesFromTheLoginShell() {
+        var shell: [String: String] = [:]
+        for k in networkKeys { shell[k] = "shell-\(k)" }
+        var planted = appEnv
+        for k in networkKeys { planted[k] = "launchd-\(k)" }
+        let env = childEnvironment(appEnv: planted, loginShell: shell)
+        for k in networkKeys { XCTAssertEqual(env[k], "shell-\(k)", k) }
+        // Only the login shell supplies them: the app's own environment never does.
+        let fromApp = childEnvironment(appEnv: planted, loginShell: [:])
+        for k in networkKeys { XCTAssertNil(fromApp[k], k) }
+    }
+
+    func testParseShellProbeReadsProxyAndCertificates() {
+        var values = shellKeys.map { _ in "" }
+        values[shellKeys.firstIndex(of: "https_proxy")!] = "http://proxy.corp:3128"
+        values[shellKeys.firstIndex(of: "NO_PROXY")!] = "localhost,127.0.0.1"
+        values[shellKeys.firstIndex(of: "NODE_EXTRA_CA_CERTS")!] = "/Users/u/corp-ca.pem"
+        let out = Data(("__acp_env__\0" + values.map { $0 + "\0" }.joined()).utf8)
+        XCTAssertEqual(parseShellProbe(out), ["https_proxy": "http://proxy.corp:3128", "NO_PROXY": "localhost,127.0.0.1",
+                                              "NODE_EXTRA_CA_CERTS": "/Users/u/corp-ca.pem"])
+    }
+
     func testShellProbeAsksForEveryKey() {
         for k in shellKeys { XCTAssertTrue(shellProbeCommand.contains("\"$\(k)\""), k) }
         XCTAssertEqual(shellProbeCommand.components(separatedBy: "%s").count - 1, shellKeys.count + 1)
-        for k in agentHomes { XCTAssertTrue(shellKeys.contains(k), k) }
+        for k in agentHomes + networkKeys { XCTAssertTrue(shellKeys.contains(k), k) }
     }
 
     func testParseShellProbeReadsAgentHomes() {

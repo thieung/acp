@@ -758,3 +758,124 @@ func TestLoginTimeoutStopsAk(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 }
+
+// GET /api/running is what the desktop app asks before it quits: true while an operation or a
+// sign-in runs.
+func TestRunningEndpoint(t *testing.T) {
+	f := testkit.New(t)
+	started, release := make(chan struct{}, 2), make(chan struct{})
+	c := start(t, f, func(_ context.Context, _ []byte, args ...string) ([]byte, error) {
+		if args[0] == "scan" || args[0] == "setup" || (args[0] == "global" && !slices.Contains(args, "--check")) {
+			started <- struct{}{}
+			<-release
+		}
+		return []byte(`{"schema_version":1,"kind":"acp.x","data":{"text":""},"exit_code":0}`), nil
+	})
+	running := func() bool {
+		t.Helper()
+		code, body, _ := c.do("GET", "/api/running", nil, nil)
+		var out map[string]any
+		if code != http.StatusOK || json.Unmarshal(body, &out) != nil || len(out) != 1 {
+			t.Fatalf("running: %d %s", code, body)
+		}
+		b, ok := out["running"].(bool)
+		if !ok {
+			t.Fatalf("running is not a boolean: %s", body)
+		}
+		return b
+	}
+	if code, _, _ := c.do("GET", "/api/running", nil, nil); code != http.StatusUnauthorized {
+		t.Fatalf("signed out: %d", code)
+	}
+	c.signIn()
+	if running() {
+		t.Fatal("running while idle")
+	}
+
+	if code, out, _ := c.do("POST", "/api/run", map[string]any{"kind": "scan"}, nil); code != http.StatusAccepted {
+		t.Fatalf("run: %d %s", code, out)
+	}
+	<-started
+	if running() {
+		t.Fatal("a scan counts as a change")
+	}
+	release <- struct{}{}
+	waitIdle(t, c)
+
+	_, g := c.run("global.preview", nil, "")
+	if code, out, _ := c.do("POST", "/api/run", map[string]any{"kind": "global.apply", "digest": g.Digest}, nil); code != http.StatusAccepted {
+		t.Fatalf("global.apply: %d %s", code, out)
+	}
+	<-started
+	if !running() {
+		t.Fatal("not running while a change runs")
+	}
+	release <- struct{}{}
+	waitIdle(t, c)
+	if running() {
+		t.Fatal("running after the change ended")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.do("POST", "/api/login", map[string]string{"key": fakeKey}, nil)
+	}()
+	<-started
+	if !running() {
+		t.Fatal("not running while a sign-in runs")
+	}
+	release <- struct{}{}
+	<-done
+	if running() {
+		t.Fatal("running after the sign-in ended")
+	}
+}
+
+func waitIdle(t *testing.T, c *client) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.srv.Wait(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The key reaches acp exactly as the JSON string says, escapes and all, trimmed of spaces.
+func TestLoginEndpointDecodesTheKey(t *testing.T) {
+	var stdin []byte
+	c := start(t, testkit.New(t), func(_ context.Context, in []byte, args ...string) ([]byte, error) {
+		stdin = slices.Clone(in)
+		return []byte(`{"schema_version":1,"kind":"acp.setup.login","data":{},"exit_code":0}`), nil
+	})
+	c.signIn()
+	bs := `\` // a backslash, so the escapes below stay JSON escapes
+	for raw, want := range map[string]string{
+		`{"key":"  ak_live_` + bs + `u0041\/b\"c\\d` + bs + `u00e9` + bs + `ud83d` + bs + `ude00 \n"}`: "ak_live_A/b\"c\\d\u00e9\U0001F600",
+		`{"other":1,"key":"k"}`: "k",
+	} {
+		req, _ := http.NewRequest("POST", c.base+"/api/login", strings.NewReader(raw))
+		req.Header.Set("Authorization", "Bearer "+c.token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || string(stdin) != want {
+			t.Errorf("%s: %d, stdin %q, want %q", raw, resp.StatusCode, stdin, want)
+		}
+	}
+	stdin = nil
+	for _, raw := range []string{`{"key":"a\qb"}`, `{"key":"` + bs + `ud83d"}`, `{"key":"` + bs + `ud83d` + bs + `u0041"}`, `{"key":"` + bs + `u00g1"}`, `{"key":12}`, `{"key":["k"]}`, `{"key":"a` + "\x01" + `"}`, `{"key":null}`} {
+		req, _ := http.NewRequest("POST", c.base+"/api/login", strings.NewReader(raw))
+		req.Header.Set("Authorization", "Bearer "+c.token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest || stdin != nil {
+			t.Errorf("%s: %d, stdin %q", raw, resp.StatusCode, stdin)
+		}
+	}
+}

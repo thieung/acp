@@ -2,8 +2,6 @@ package commands
 
 import (
 	"context"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,36 +15,31 @@ import (
 // is written by the program that owns it.
 type agentCLI struct {
 	name, env string
+	dirs      []string // folders under $HOME tried after PATH
 	add       func(bin string) []string
 	remove    []string
 }
 
 var agentCLIs = []agentCLI{
-	{name: "claude", env: "ACP_CLAUDE",
+	// A local install of Claude Code lives in ~/.claude/local, often reached only by a shell alias.
+	{name: "claude", env: "ACP_CLAUDE", dirs: []string{".local/bin", ".claude/local"},
 		add:    func(bin string) []string { return []string{"mcp", "add", "--scope", "user", "acp", "--", bin, "mcp"} },
 		remove: []string{"mcp", "remove", "--scope", "user", "acp"}},
-	{name: "codex", env: "ACP_CODEX",
+	{name: "codex", env: "ACP_CODEX", dirs: []string{".local/bin"},
 		add:    func(bin string) []string { return []string{"mcp", "add", "acp", "--", bin, "mcp"} },
 		remove: []string{"mcp", "remove", "acp"}},
 }
 
 // find returns the CLI's path, or "" when it is not installed: ACP_CLAUDE / ACP_CODEX when set
-// (nothing else is tried then), else PATH, else ~/.local/bin. The desktop app hands acp the PATH
-// of a login shell, so no other folder is guessed.
+// (nothing else is tried then), else PATH, else its folders under $HOME. The desktop app hands acp
+// the PATH of a login shell, so no other folder is guessed.
 func (c agentCLI) find() string {
-	if p := os.Getenv(c.env); p != "" {
-		if !executableFile(p) {
-			return ""
-		}
-		return p
+	dirs := make([]string, len(c.dirs))
+	for i, d := range c.dirs {
+		dirs[i] = filepath.Join(core.HomeDir(), d)
 	}
-	if p, err := exec.LookPath(c.name); err == nil {
-		return p
-	}
-	if p := filepath.Join(core.HomeDir(), ".local", "bin", c.name); executableFile(p) {
-		return p
-	}
-	return ""
+	p, _ := core.FindCLI(c.env, c.name, dirs...)
+	return p
 }
 
 // run runs the CLI from $HOME, so no project's .mcp.json or settings are in play.
@@ -62,11 +55,6 @@ func (c agentCLI) run(cli string, args ...string) string {
 		return c.name + ": `" + c.name + " " + strings.Join(args[:2], " ") + "` failed: " + core.Redact(msg)
 	}
 	return ""
-}
-
-func executableFile(p string) bool {
-	fi, err := os.Stat(p)
-	return err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0
 }
 
 // mcpEntry is the state of acp's user-scope entry in an agent's config, read from the file and never
