@@ -40,3 +40,25 @@ jobs:
       - run: sh scripts/tests/test-install.sh
       - run: TEST_SHELL=bash sh scripts/tests/test-install.sh
       - run: sh scripts/tests/install-smoke.sh
+
+  desktop:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: swift test
+        working-directory: desktop
+      # No signing secrets here: the app is signed ad hoc, and the DMG is a build artifact, not a release.
+      - run: sh scripts/build-desktop.sh v0.0.0-ci
+      - run: sh scripts/tests/desktop-smoke.sh dist/desktop/acp.app v0.0.0-ci
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: acp-desktop-unsigned
+          path: dist/desktop/*.dmg
+          if-no-files-found: error
+          retention-days: 7

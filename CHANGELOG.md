@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- New macOS app, `acp.app`: a Swift + WKWebView shell around the bundled acp. It shows the `acp
+  web` dashboard, gives acp a clean, allow-listed environment and offers to move itself to
+  Applications. Sparkle updates it once a feed and key are configured.
+  `scripts/build-desktop.sh` builds a universal app and DMG, and `scripts/tests/desktop-smoke.sh`
+  launches it. CI builds and smokes it; a release attaches the DMG only when it is signed and
+  notarized.
+- `acp setup login --api-key-stdin` signs in to AgentKit with an API key read from stdin. The
+  key reaches `ak` on stdin only, never argv, the environment, logs or output. The dashboard has
+  a sign-in form for it.
+- `acp setup link-cli` points `~/.local/bin/acp` at the running binary. It replaces only another
+  acp, backing up a curl-installed one first. `acp setup install-clt` opens Apple's installer
+  for the Command Line Tools, and `acp setup` reports both.
+- `acp connect` registers `acp mcp` with Claude Code and Codex through their own CLIs.
+- `acp web --exit-with-parent` stops when stdin closes. acp refuses to wire hooks, links or MCP
+  to a binary on a path that vanishes (temp builds, disk images, App Translocation).
+  `install.sh` leaves a link to `acp.app`'s binary alone.
+
 - acp is now a single Go binary for macOS and Linux (arm64, amd64), replacing the Python
   package. It installs from GitHub Releases through `install.sh`, which checks sha256.
 - New `acp scan` and `acp explain`: a read-only health check with stable finding codes,

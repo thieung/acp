@@ -34,3 +34,90 @@ jobs:
           set -- --title "acp $TAG" --generate-notes --verify-tag
           case $TAG in *-*) set -- "$@" --prerelease ;; esac
           gh release create "$TAG" "$@" dist/*.tar.gz dist/checksums.txt install.sh
+
+  # The macOS app ships only signed and notarized. Without those secrets the job says so and
+  # stops; the CLI release above is complete without it.
+  desktop:
+    needs: release
+    runs-on: macos-latest
+    timeout-minutes: 45
+    environment: release
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      P12_BASE64: ${{ secrets.ACP_DEVELOPER_ID_P12_BASE64 }}
+      P12_PASSWORD: ${{ secrets.ACP_DEVELOPER_ID_P12_PASSWORD }}
+      ACP_DEVELOPER_ID: ${{ secrets.ACP_DEVELOPER_ID }}
+      NOTARY_KEY: ${{ secrets.ACP_NOTARY_KEY }}
+      ACP_NOTARY_KEY_ID: ${{ secrets.ACP_NOTARY_KEY_ID }}
+      ACP_NOTARY_ISSUER: ${{ secrets.ACP_NOTARY_ISSUER }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.ACP_SPARKLE_PRIVATE_KEY }}
+      ACP_SPARKLE_FEED_URL: ${{ vars.ACP_SPARKLE_FEED_URL }}
+      ACP_SPARKLE_PUBLIC_KEY: ${{ vars.ACP_SPARKLE_PUBLIC_KEY }}
+    steps:
+      - name: Check signing secrets
+        id: secrets
+        run: |
+          for v in P12_BASE64 P12_PASSWORD ACP_DEVELOPER_ID NOTARY_KEY ACP_NOTARY_KEY_ID ACP_NOTARY_ISSUER; do
+            if [ -z "$(printenv "$v")" ]; then
+              echo "::notice::acp.app not released: Developer ID and notary secrets are not set (missing $v)"
+              echo "ok=false" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "ok=true" >>"$GITHUB_OUTPUT"
+      - if: steps.secrets.outputs.ok == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: steps.secrets.outputs.ok == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Keychain and keys
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          umask 077
+          keychain=$RUNNER_TEMP/acp-signing.keychain-db
+          kc_pass=$(openssl rand -hex 24)
+          printf '%s' "$P12_BASE64" | base64 --decode >"$RUNNER_TEMP/id.p12"
+          security create-keychain -p "$kc_pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$kc_pass" "$keychain"
+          security import "$RUNNER_TEMP/id.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kc_pass" "$keychain" >/dev/null
+          # The search list is one path per word; codesign must still find the system keychains.
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/id.p12"
+          printf '%s' "$NOTARY_KEY" >"$RUNNER_TEMP/notary.p8"
+          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
+            printf '%s' "$SPARKLE_PRIVATE_KEY" >"$RUNNER_TEMP/sparkle.key"
+          fi
+      - name: Build, sign and notarize
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          export ACP_NOTARY_KEY_FILE="$RUNNER_TEMP/notary.p8"
+          if [ -f "$RUNNER_TEMP/sparkle.key" ]; then
+            export ACP_SPARKLE_PRIVATE_KEY_FILE="$RUNNER_TEMP/sparkle.key"
+          fi
+          sh scripts/build-desktop.sh "$TAG"
+      - if: steps.secrets.outputs.ok == 'true'
+        run: sh scripts/tests/desktop-smoke.sh dist/desktop/acp.app "$TAG"
+      - name: Upload to the release
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The CLI release already has a checksums.txt that install.sh reads; keep it.
+          cp dist/desktop/checksums.txt dist/desktop/desktop-checksums.txt
+          set -- dist/desktop/acp-*.dmg dist/desktop/desktop-checksums.txt
+          if [ -f dist/desktop/appcast/appcast.xml ]; then set -- "$@" dist/desktop/appcast/appcast.xml; fi
+          gh release upload "$TAG" "$@" --clobber -R "$GITHUB_REPOSITORY"
+      - name: Remove keychain and keys
+        if: always() && steps.secrets.outputs.ok == 'true'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/acp-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/sparkle.key"

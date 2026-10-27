@@ -41,6 +41,10 @@ acp skills set <id> --add herdr --remove ak-shopify   # preview; add --apply to 
 acp kit add <id> --apply
 acp setup              # is ak installed and signed in, doctor, pins
 acp setup install-ak --apply
+acp setup login --api-key-stdin <key.txt   # sign in to AgentKit without a terminal prompt
+acp setup link-cli     # preview pointing ~/.local/bin/acp at this binary; add --apply
+acp setup install-clt  # macOS: open Apple's installer for the Command Line Tools (git); add --apply
+acp connect            # preview registering acp mcp with Claude Code and Codex; add --apply
 acp describe --json    # every command's contract for agents (acp.describe/2)
 ```
 
@@ -89,23 +93,49 @@ This exclude applies to that worktree only:
 
 One change runs at a time.
 
+`acp web --port 0 --no-open --print-url --exit-with-parent` is how an app runs the dashboard. It
+picks a free port and prints the `sign in:` line without a terminal. It stops when its stdin
+closes, after waiting for a running change.
+
 `acp mcp` has four read-only tools: `acp_scan`, `acp_status`, `acp_explain`, `acp_fix_preview`. An agent cannot apply anything through MCP. A person runs the command or uses the dashboard.
 
 ```bash
+acp connect --apply    # or by hand:
 claude mcp add --scope user acp -- ~/.local/bin/acp mcp
 codex mcp add acp -- ~/.local/bin/acp mcp
 ```
+
+## Desktop app (macOS)
+
+`acp.app` is for people who do not use a terminal. It bundles acp and shows the same dashboard
+in a window. From there you can:
+- Sign in to AgentKit with an API key. The key reaches `ak` on stdin only.
+- Point `~/.local/bin/acp` at the bundled binary.
+- Connect `acp mcp` to Claude Code and Codex.
+
+Each change is previewed first. Sparkle keeps the app up to date once a release is signed.
+
+Drag `acp.app` from the DMG to Applications. `install.sh` leaves a `~/.local/bin/acp` that points
+into the app alone. To use the CLI on its own again, remove that link and reinstall.
+
+Releases attach the DMG only when it is signed with a Developer ID and notarized. Building,
+signing, the secrets the maintainer supplies and removing the app are covered in
+[desktop/README.md](desktop/README.md).
 
 ## Develop
 
 ```bash
 go vet ./... && go test -race ./...
 sh scripts/build-release.sh v0.0.0-dev && sh scripts/tests/test-install.sh
+cd desktop && swift test && cd ..                    # macOS app
+sh scripts/build-desktop.sh v0.0.0-dev && sh scripts/tests/desktop-smoke.sh dist/desktop/acp.app v0.0.0-dev
 ```
 
-CI runs the tests on Ubuntu and macOS, then tries the installer. Pushing a tag `v*` runs the release workflow:
+CI runs the tests on Ubuntu and macOS, then tries the installer. On macOS it also builds the app
+(signed ad hoc), runs the smoke test and keeps the DMG as a workflow artifact. Pushing a tag `v*` runs the release workflow:
 1. It builds four archives (darwin/linux × arm64/amd64).
 2. It writes `checksums.txt` and `install.sh`.
 3. It creates the GitHub Release. A tag with a `-` in it is a prerelease.
+4. When the signing and notary secrets exist, it builds, notarizes and smokes `acp.app`. Then it attaches the DMG and `desktop-checksums.txt`.
 
 `site/index.html` is the bilingual guide (English and Vietnamese); open it in a browser.
