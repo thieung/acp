@@ -5,3 +5,5 @@ dist/
 build/
 .pytest_cache/
 .DS_Store
+# Go output
+/acp
