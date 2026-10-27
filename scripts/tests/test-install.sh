@@ -1,5 +1,6 @@
 #!/bin/sh
-# Exercise install.sh against a local build: fresh install, upgrade, refusals, legacy link, bad checksum.
+# Exercise install.sh against a local build: fresh install, upgrade, refusals, legacy and app links,
+# bad checksum.
 #   sh scripts/build-release.sh v0.0.0-dev && sh scripts/tests/test-install.sh
 set -eu
 
@@ -40,6 +41,23 @@ install_acp "file://$dist" || fail "legacy link: $(cat "$work/out")"
 grep -q 'Python acp' "$work/out" || fail "legacy link not announced"
 [ ! -L "$work/bin/acp" ] || fail "legacy link left in place"
 [ -f "$work/old/scripts/acp" ] || fail "legacy target removed"
+
+rm "$work/bin/acp"
+helper="$work/Applications/acp.app/Contents/Helpers/acp"
+mkdir -p "$(dirname "$helper")"
+cp "$dist/checksums.txt" "$helper"
+ln -s "$helper" "$work/bin/acp"
+install_acp "file://$dist" && fail "replaced the acp that acp.app manages"
+grep -q 'managed by acp.app' "$work/out" || fail "app link message: $(cat "$work/out")"
+[ "$(readlink "$work/bin/acp")" = "$helper" ] || fail "app link changed"
+[ "$(cat "$helper")" = "$(cat "$dist/checksums.txt")" ] || fail "app binary changed"
+
+# The app was deleted: its link dangles and is replaced.
+rm -rf "$work/Applications/acp.app"
+install_acp "file://$dist" || fail "dangling app link: $(cat "$work/out")"
+grep -q 'acp.app, which is gone' "$work/out" || fail "dangling app link not announced: $(cat "$work/out")"
+[ ! -L "$work/bin/acp" ] || fail "dangling app link left in place"
+"$work/bin/acp" --version | grep -q 'acp v' || fail "binary over a dangling app link does not run"
 
 rm "$work/bin/acp"
 ln -s /bin/sh "$work/bin/acp"

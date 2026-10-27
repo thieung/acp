@@ -100,6 +100,11 @@ if [ -L "$dest" ]; then
   old=$(readlink "$dest")
   case $old in
     */scripts/acp) say "replacing the link to the Python acp ($old)" ;;
+    */acp.app/Contents/Helpers/acp)
+      # A link into a deleted app leads nowhere; only a live one belongs to the app.
+      [ ! -e "$dest" ] || die "acp is managed by acp.app; update it from the app (or remove the link to install the CLI separately)"
+      say "replacing the link to acp.app, which is gone ($old)"
+      ;;
     *) die "$dest is a link to $old, not acp; move it away and run again" ;;
   esac
 elif [ -e "$dest" ]; then

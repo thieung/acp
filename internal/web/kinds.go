@@ -97,6 +97,16 @@ var kinds = map[string]kind{
 	"setup.install-ak.preview": {argv: fixed("setup", "install-ak")},
 	"setup.install-ak":         {mutation: true, preview: "setup.install-ak.preview", argv: fixed("setup", "install-ak", "--apply")},
 
+	// link-cli links the binary serving the dashboard: inside acp.app, the bundled one.
+	"setup.link-cli.preview":    {argv: fixed("setup", "link-cli")},
+	"setup.link-cli":            {mutation: true, preview: "setup.link-cli.preview", argv: fixed("setup", "link-cli", "--apply")},
+	"setup.install-clt.preview": {argv: fixed("setup", "install-clt")},
+	"setup.install-clt":         {mutation: true, preview: "setup.install-clt.preview", argv: fixed("setup", "install-clt", "--apply")},
+
+	// connect registers `acp mcp` with every installed agent CLI; its preview reads config files only.
+	"connect.preview": {argv: fixed("connect")},
+	"connect.apply":   {mutation: true, preview: "connect.preview", argv: fixed("connect", "--apply")},
+
 	// The apply runs only while a fresh preview still resolves the same versions.
 	"upgrade.preview": {needs: "upgrade", argv: upgradeArgv("--dry-run")},
 	"upgrade":         {mutation: true, preview: "upgrade.preview", needs: "upgrade", argv: upgradeArgv()},

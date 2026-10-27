@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -206,5 +207,66 @@ func TestSelectionMatches(t *testing.T) {
 		if got := e.SelectionMatches(p, c.recorded); got != c.want {
 			t.Errorf("%s vs %v: got %v", c.ak, c.recorded, got)
 		}
+	}
+}
+
+func TestFindCLIOrder(t *testing.T) {
+	base := t.TempDir()
+	write := func(p string, mode os.FileMode) string {
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte("#!/bin/sh\n"), mode); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	onPath := write(filepath.Join(base, "path/tool"), 0o755)
+	first := write(filepath.Join(base, "first/tool"), 0o644) // not executable: skipped
+	second := write(filepath.Join(base, "second/tool"), 0o755)
+	env := write(filepath.Join(base, "env/tool"), 0o755)
+	t.Setenv("ACP_TEST_TOOL", "")
+	t.Setenv("PATH", filepath.Join(base, "path"))
+	if p, fromEnv := FindCLI("ACP_TEST_TOOL", "tool", filepath.Dir(first), filepath.Dir(second)); p != onPath || fromEnv {
+		t.Fatalf("PATH first: %q %v", p, fromEnv)
+	}
+	t.Setenv("PATH", filepath.Join(base, "empty"))
+	if p, _ := FindCLI("ACP_TEST_TOOL", "tool", filepath.Dir(first), filepath.Dir(second)); p != second {
+		t.Fatalf("dirs in order, executables only: %q", p)
+	}
+	if p, fromEnv := FindCLI("ACP_TEST_TOOL", "tool"); p != "" || fromEnv {
+		t.Fatalf("nothing found: %q %v", p, fromEnv)
+	}
+	t.Setenv("ACP_TEST_TOOL", env)
+	if p, fromEnv := FindCLI("ACP_TEST_TOOL", "tool", filepath.Dir(second)); p != env || !fromEnv {
+		t.Fatalf("env var: %q %v", p, fromEnv)
+	}
+	// A set variable that names no executable stops the search.
+	t.Setenv("ACP_TEST_TOOL", first)
+	if p, fromEnv := FindCLI("ACP_TEST_TOOL", "tool", filepath.Dir(second)); p != "" || !fromEnv {
+		t.Fatalf("bad env var fell back: %q %v", p, fromEnv)
+	}
+}
+
+func TestAkBinMessages(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("PATH", filepath.Join(base, "empty"))
+	t.Setenv("HOME", base)
+	t.Setenv("AK_INSTALL_DIR", "")
+	t.Setenv("ACP_AK", filepath.Join(base, "nowhere/ak"))
+	if _, err := AkBin(); err == nil || err.Error() != "ak is not installed (ACP_AK="+filepath.Join(base, "nowhere/ak")+" is not an executable file)" {
+		t.Fatalf("ACP_AK: %v", err)
+	}
+	t.Setenv("ACP_AK", "")
+	if _, err := AkBin(); err == nil || err.Error() != "ak is not installed: not on PATH or in ~/.local/bin (see `acp setup`)" {
+		t.Fatalf("missing: %v", err)
+	}
+	ak := filepath.Join(base, ".local/bin/ak")
+	os.MkdirAll(filepath.Dir(ak), 0o755)
+	os.WriteFile(ak, []byte("#!/bin/sh\n"), 0o755)
+	if p, err := AkBin(); err != nil || p != ak {
+		t.Fatalf("~/.local/bin: %q %v", p, err)
+	}
+	t.Setenv("AK_INSTALL_DIR", filepath.Join(base, "other"))
+	if _, err := AkBin(); err == nil {
+		t.Fatal("AK_INSTALL_DIR replaces ~/.local/bin")
 	}
 }

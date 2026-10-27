@@ -169,7 +169,7 @@
       "what": "ak đã được cài nhưng chưa đăng nhập vào tài khoản AgentKit.",
       "why": "Chưa đăng nhập thì ak không tải được các bản AgentKit.",
       "ignore": "Cài và cập nhật AgentKit sẽ thất bại.",
-      "todo": "Mở Terminal và chạy acp setup login (cần làm trực tiếp, không chạy từ trang này được).",
+      "todo": "Đăng nhập bằng API key của AgentKit ở mục AgentKit & Runtime trên trang acp hoặc trong ứng dụng acp; ở terminal thì đưa key vào acp setup login --api-key-stdin qua stdin.",
       "glossary": [
         "AgentKit"
       ]

@@ -3,6 +3,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -11,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"net/http"
 	"path"
@@ -18,6 +20,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/thieung/acp/internal/core"
 	"github.com/thieung/acp/internal/scan"
@@ -44,6 +49,8 @@ type Server struct {
 	order    []string
 	busy     bool
 	lastScan []byte
+	active   int           // operations and sign-ins still running
+	idle     chan struct{} // closed when active drops to 0; nil until someone waits
 }
 
 type operation struct {
@@ -81,6 +88,52 @@ func (s *Server) Code() string {
 	return s.code
 }
 
+// Changing reports whether a change or a sign-in holds the lock. Previews and scans do not count:
+// stopping them loses nothing.
+func (s *Server) Changing() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.busy
+}
+
+// Running reports whether an operation or a sign-in is still running.
+func (s *Server) Running() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.active > 0
+}
+
+// Wait returns once no operation or sign-in is running, or with ctx's error. A shutdown calls it
+// after the listener is closed, so a change the user started is not cut off halfway through.
+func (s *Server) Wait(ctx context.Context) error {
+	s.mu.Lock()
+	if s.active == 0 {
+		s.mu.Unlock()
+		return nil
+	}
+	if s.idle == nil {
+		s.idle = make(chan struct{})
+	}
+	idle := s.idle
+	s.mu.Unlock()
+	select {
+	case <-idle:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// end counts one operation or sign-in as finished; each starts by raising active under mu.
+func (s *Server) end() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.active--; s.active == 0 && s.idle != nil {
+		close(s.idle)
+		s.idle = nil
+	}
+}
+
 // Handler serves the static page and the API behind the Host, Origin and session checks.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -94,7 +147,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/hooks", s.hooks)
 	mux.HandleFunc("GET /api/scan", s.scanResult)
 	mux.HandleFunc("POST /api/run", s.start)
+	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("GET /api/ops/{id}", s.op)
+	mux.HandleFunc("GET /api/running", s.running)
 	mux.HandleFunc("GET /", s.static)
 	return s.guard(mux)
 }
@@ -185,9 +240,10 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"token": t})
 }
 
-// acp runs one command with --json and returns its envelope.
-func (s *Server) acp(ctx context.Context, args ...string) (json.RawMessage, error) {
-	out, err := s.run(ctx, append(slices.Clone(args), "--json")...)
+// acp runs one command with --json and returns its envelope. stdin, when not nil, is the child's
+// standard input.
+func (s *Server) acp(ctx context.Context, stdin []byte, args ...string) (json.RawMessage, error) {
+	out, err := s.run(ctx, stdin, append(slices.Clone(args), "--json")...)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +275,7 @@ func (s *Server) command(args ...string) http.HandlerFunc {
 }
 
 func (s *Server) respond(w http.ResponseWriter, r *http.Request, args ...string) {
-	env, err := s.acp(r.Context(), args...)
+	env, err := s.acp(r.Context(), nil, args...)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -256,7 +312,7 @@ func (s *Server) explain(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) hooks(w http.ResponseWriter, r *http.Request) {
-	env, err := s.acp(r.Context(), "hooks")
+	env, err := s.acp(r.Context(), nil, "hooks")
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -278,6 +334,181 @@ func (s *Server) scanResult(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, json.RawMessage(last))
+}
+
+// ------------------------------------------------------------------ sign-in
+
+// loginTimeout bounds one sign-in; it runs on its own context so a closed tab cannot cut it short.
+// It outlasts the child's own ak bounds (core.AKLoginTimeout plus core.AKWhoamiTimeout), so ak
+// normally answers or times out first; if it does fire, the child stops ak before it exits.
+var loginTimeout = 2 * time.Minute
+
+// login signs in to AgentKit with an API key. It has nothing to preview, so it needs no digest,
+// but it still waits its turn behind any other change. The key reaches acp only on stdin: it is
+// never in argv, an operation or a session. Every copy this handler makes (the body, the raw JSON
+// value, the decoded key) is a byte slice it clears once acp has run; buffers inside net/http and
+// the kernel are out of its reach, so the wiping is best effort.
+func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	body, err := readBody(r.Body)
+	defer clear(body)
+	var in struct {
+		Key json.RawMessage `json:"key"`
+	}
+	err = errors.Join(err, json.Unmarshal(body, &in))
+	defer clear(in.Key)
+	decoded, ok := jsonString(in.Key)
+	defer clear(decoded)
+	if err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	key := bytes.TrimSpace(decoded)
+	if len(key) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nhập API key của AgentKit"})
+		return
+	}
+	s.mu.Lock()
+	if s.busy {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "một thay đổi khác đang chạy; đợi nó xong"})
+		return
+	}
+	s.busy = true
+	s.active++
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.busy = false
+		s.mu.Unlock()
+		s.end()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), loginTimeout)
+	defer cancel()
+	env, err := s.acp(ctx, key, "setup", "login", "--api-key-stdin")
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "đăng nhập quá lâu không xong; kiểm tra mạng rồi thử lại"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	var e struct {
+		ExitCode int `json:"exit_code"`
+	}
+	if failed(env) || json.Unmarshal(env, &e) != nil || e.ExitCode != 0 {
+		writeJSON(w, http.StatusBadRequest, env)
+		return
+	}
+	writeJSON(w, http.StatusOK, env)
+}
+
+// readBody reads a request body into one buffer sized for the largest body the guard allows, so
+// no outgrown copy of a secret is left behind uncleared.
+func readBody(r io.Reader) ([]byte, error) {
+	buf := make([]byte, maxBody+1)
+	n := 0
+	for {
+		m, err := r.Read(buf[n:])
+		n += m
+		switch {
+		case err == io.EOF:
+			return buf[:n], nil
+		case err != nil:
+			return buf[:n], err
+		case n == len(buf):
+			return buf[:n], errors.New("request body too large")
+		}
+	}
+}
+
+// jsonString decodes a JSON string value into a new byte slice the caller can clear; the standard
+// decoder only yields Go strings, which cannot be. Missing or null decodes as empty. The result is
+// never longer than raw, so it is allocated once. Lone UTF-16 surrogates and invalid UTF-8 are
+// refused rather than replaced: an API key has neither.
+func jsonString(raw []byte) ([]byte, bool) {
+	if raw == nil || bytes.Equal(raw, []byte("null")) {
+		return nil, true
+	}
+	if len(raw) < 2 || raw[0] != '"' || raw[len(raw)-1] != '"' {
+		return nil, false
+	}
+	in := raw[1 : len(raw)-1]
+	out := make([]byte, 0, len(in))
+	bad := func() ([]byte, bool) { clear(out[:cap(out)]); return nil, false }
+	for i := 0; i < len(in); i++ {
+		c := in[i]
+		if c < 0x20 || c == '"' {
+			return bad()
+		}
+		if c != '\\' {
+			out = append(out, c)
+			continue
+		}
+		if i++; i == len(in) {
+			return bad()
+		}
+		switch in[i] {
+		case '"', '\\', '/':
+			out = append(out, in[i])
+		case 'b':
+			out = append(out, '\b')
+		case 'f':
+			out = append(out, '\f')
+		case 'n':
+			out = append(out, '\n')
+		case 'r':
+			out = append(out, '\r')
+		case 't':
+			out = append(out, '\t')
+		case 'u':
+			r := hex4(in[i+1:])
+			i += 4
+			if utf16.IsSurrogate(r) {
+				if i+2 >= len(in) || in[i+1] != '\\' || in[i+2] != 'u' {
+					return bad()
+				}
+				r = utf16.DecodeRune(r, hex4(in[i+3:]))
+				i += 6
+				if r == utf8.RuneError {
+					return bad()
+				}
+			}
+			if r < 0 {
+				return bad()
+			}
+			out = utf8.AppendRune(out, r)
+		default:
+			return bad()
+		}
+	}
+	if !utf8.Valid(out) {
+		return bad()
+	}
+	return out, true
+}
+
+// hex4 is the value of four hex digits at the start of b, or -1.
+func hex4(b []byte) rune {
+	if len(b) < 4 {
+		return -1
+	}
+	var r rune
+	for _, c := range b[:4] {
+		switch {
+		case '0' <= c && c <= '9':
+			c -= '0'
+		case 'a' <= c && c <= 'f':
+			c -= 'a' - 10
+		case 'A' <= c && c <= 'F':
+			c -= 'A' - 10
+		default:
+			return -1
+		}
+		r = r<<4 | rune(c)
+	}
+	return r
 }
 
 // ------------------------------------------------------------------ runs
@@ -335,7 +566,7 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	// Preview again under the busy flag: the change runs only if the machine still looks the same.
-	env, err := s.acp(r.Context(), kinds[k.preview].argv(in.Args)...)
+	env, err := s.acp(r.Context(), nil, kinds[k.preview].argv(in.Args)...)
 	if err == nil && !failed(env) && digest(env) == in.Digest {
 		id := s.launch(in.Kind, k.argv(in.Args), tok, "", func() {
 			s.mu.Lock()
@@ -381,9 +612,11 @@ func (s *Server) launch(kind string, argv []string, tok, key string, done func()
 		delete(s.ops, s.order[i])
 		s.order = slices.Delete(s.order, i, i+1)
 	}
+	s.active++
 	s.mu.Unlock()
 	go func() {
-		env, err := s.acp(context.Background(), argv...)
+		defer s.end()
+		env, err := s.acp(context.Background(), nil, argv...)
 		s.mu.Lock()
 		o.State = "done"
 		if err != nil {
@@ -406,6 +639,12 @@ func (s *Server) launch(kind string, argv []string, tok, key string, done func()
 		}
 	}()
 	return o.ID
+}
+
+// running answers whether a change or a sign-in is still running, so the desktop app can ask
+// before it quits.
+func (s *Server) running(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{"running": s.Changing()})
 }
 
 func (s *Server) op(w http.ResponseWriter, r *http.Request) {

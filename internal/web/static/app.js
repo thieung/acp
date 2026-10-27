@@ -41,6 +41,8 @@
   };
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // The acp desktop app loads this page in its own window and names itself in the user agent.
+  const inApp = /\bacp-desktop\//.test(navigator.userAgent);
   const toArray = (v) => (Array.isArray(v) ? v : []);
 
   // ------------------------------------------------------------ state
@@ -74,6 +76,9 @@
     'hooks.install': ['Các hook khác trong tệp cài đặt'],
     'hooks.uninstall': ['Các hook khác trong tệp cài đặt'],
     'setup.install-ak': ['Skill và dự án của bạn'],
+    'setup.link-cli': ['Không đụng tới file nào khác trong ~/.local/bin'],
+    'setup.install-clt': ['Chỉ mở hộp thoại cài đặt của Apple'],
+    'connect.apply': ['Không đổi các MCP server khác'],
     upgrade: ['Skill cá nhân', 'Tệp Git đang theo dõi'],
     add: ['Mã nguồn trong repo; acp chỉ thêm khai báo và liên kết'],
   };
@@ -109,7 +114,7 @@
   const state = {
     section: store.get('acp.section') || 'overview',
     tech: store.local('acp.tech') === '1',
-    status: null, setup: null, hooks: null, global: null, scan: null, scanAt: null,
+    status: null, setup: null, hooks: null, global: null, connect: null, scan: null, scanAt: null,
     glossary: {}, scanning: false, loadError: null,
   };
 
@@ -123,6 +128,10 @@
     try {
       res = await fetch(path, { method: opts.method || 'GET', headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
     } catch {
+      if (inApp) {
+        toast('Phiên làm việc đã hết.', { label: 'Đăng nhập lại', onclick: restartApp });
+        return { status: 0, data: { error: 'Phiên làm việc đã hết.' } };
+      }
       return { status: 0, data: { error: 'Không kết nối được acp web. Nó còn chạy trong terminal không?' } };
     }
     let data = null;
@@ -155,6 +164,11 @@
       setup: () => api('/api/setup'),
       hooks: () => api('/api/hooks'),
       global: () => api('/api/global'),
+      // The connect preview only reads the agents' config files; it never runs claude or codex.
+      connect: async () => {
+        const op = await runOp('connect.preview', {});
+        return op.error ? { status: op.status || 502, data: { error: op.error } } : { status: 200, data: op.envelope };
+      },
     };
     const names = what || Object.keys(jobs);
     const results = await Promise.all(names.map((n) => jobs[n]()));
@@ -208,12 +222,21 @@
   function tech(...kids) { return state.tech ? kids : null; }
   function btn(label, onclick, cls) { return h('button', { class: 'btn ' + (cls || ''), type: 'button', onclick }, label); }
 
-  function toast(text) {
+  // toast shows a short message; one with an action stays until it is used or replaced.
+  function toast(text, action) {
     const old = document.querySelector('.toast');
     if (old) old.remove();
-    const t = h('div', { class: 'toast', role: 'status', text });
+    const t = h('div', { class: 'toast', role: 'status' }, h('span', { text }),
+      action ? h('button', { class: 'btn', type: 'button', text: action.label, onclick: () => { t.remove(); action.onclick(); } }) : null);
     document.body.append(t);
-    setTimeout(() => t.remove(), 3200);
+    if (!action) setTimeout(() => t.remove(), 3200);
+  }
+
+  // restartApp asks the desktop app for a fresh acp web and a new sign-in link.
+  function restartApp() {
+    const bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.acp;
+    if (bridge) bridge.postMessage('restart');
+    else toast('Đóng rồi mở lại ứng dụng acp.');
   }
 
   function findings(module) {
@@ -565,6 +588,41 @@
     });
   }
 
+  // loginForm signs in with an AgentKit API key. The key goes to the server once, on submit, and
+  // the field is cleared whatever the answer.
+  function loginForm() {
+    const input = h('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off',
+      placeholder: 'ak_live_…', 'aria-label': 'API key của AgentKit' });
+    const submit = h('button', { class: 'btn primary', type: 'submit', text: 'Đăng nhập' });
+    const note = h('div', { class: 'notice error hidden', role: 'alert' });
+    const form = h('form', { class: 'login' },
+      h('label', { class: 'muted', text: 'Dán API key của AgentKit để đăng nhập.' }),
+      h('div', { class: 'row' }, input, submit),
+      h('a', { href: 'https://agentkit.best', target: '_blank', rel: 'noopener noreferrer', text: 'Lấy API key' }),
+      note);
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const key = input.value.trim();
+      input.value = '';
+      if (!key) { input.focus(); return; }
+      submit.disabled = true;
+      note.classList.add('hidden');
+      const r = await api('/api/login', { method: 'POST', body: { key } });
+      submit.disabled = false;
+      const login = dataOf(r.data).login;
+      if (r.status === 200 && login && login.authenticated) {
+        toast('Đã đăng nhập AgentKit.');
+        await load();
+        render();
+        return;
+      }
+      if (r.status === 401 || r.status === 0) return; // the page already shows how to sign in again
+      note.textContent = 'Không đăng nhập được: ' + ((r.data && r.data.error) || 'HTTP ' + r.status);
+      note.classList.remove('hidden');
+    });
+    return form;
+  }
+
   const CHANNEL_TERM = { beta: 'kênh Beta', stable: 'kênh Stable' };
 
   function agentkitSection() {
@@ -580,7 +638,7 @@
         h('dt', { text: 'Đăng nhập' }), h('dd', { text: login.authenticated ? 'Đã đăng nhập' + (login.method ? ' (' + login.method + ')' : '') : 'Chưa đăng nhập' }),
         h('dt', { text: 'Tình trạng' }), h('dd', { text: d.healthy ? 'Ổn' : 'Cần xem lại' }),
         tech(h('dt', { text: 'Đường dẫn' }), h('dd', { class: 'cmd', text: ak.path || '–' }))),
-      login.authenticated ? null : h('p', { class: 'muted', text: 'Đăng nhập cần terminal: chạy acp setup login.' }),
+      login.authenticated ? null : ak.version ? loginForm() : h('p', { class: 'muted', text: 'Cài ak trước, rồi đăng nhập bằng API key ở đây.' }),
       h('div', { class: 'row' }, btn(ak.version ? 'Cài lại ak' : 'Cài ak', () => openFix('Cài công cụ ak', { preview: 'setup.install-ak.preview', apply: 'setup.install-ak', args: {} }, 'confirm'))));
     const pinRows = Object.entries(pins).flatMap(([ch, kits]) => Object.entries(kits || {}).map(([kit, v]) => h('div', {}, h('span', {}, h('b', { text: kit }), ' · ', ch), h('span', { class: 'muted', text: v }))));
     const channelCard = h('article', { class: 'card' },
@@ -588,6 +646,20 @@
       h('p', { class: 'muted', text: state.glossary[CHANNEL_TERM[channel]] || '' }),
       pinRows.length ? h('div', { class: 'list' }, pinRows) : h('p', { class: 'muted', text: 'Chưa ghim phiên bản nào.' }),
       h('div', { class: 'row' }, btn('Tìm bản mới', () => openFix('Cập nhật AgentKit', { preview: 'upgrade.preview', apply: 'upgrade', args: d.channel ? { channel: d.channel } : {} }, 'confirm'))));
+    // The terminal's acp: link-cli points ~/.local/bin/acp at the binary serving this page.
+    const cli = d.cli || {};
+    const cliCard = h('article', { class: 'card' },
+      h('div', { class: 'row' }, h('h3', { text: 'Lệnh acp trong Terminal' }),
+        cli.current ? tag('ok', 'Dùng bản này') : cli.target ? tag('warn', 'Trỏ tới acp khác') : tag('info', 'Chưa có')),
+      h('p', { class: 'muted', text: 'Gõ acp trong Terminal sẽ chạy đúng bản acp của ứng dụng này, để mọi nơi dùng chung một acp.' }),
+      tech(h('p', { class: 'cmd muted', text: (cli.path || '~/.local/bin/acp') + (cli.target ? ' → ' + cli.target : '') })),
+      cli.current ? null : h('div', { class: 'row' }, btn('Dùng acp này trong Terminal', () => openFix('Dùng acp này trong Terminal', { preview: 'setup.link-cli.preview', apply: 'setup.link-cli', args: {} }, 'confirm'))));
+    // Only macOS reports the Command Line Tools; git needs them.
+    const clt = d.clt;
+    const cltCard = clt ? h('article', { class: 'card' },
+      h('div', { class: 'row' }, h('h3', { text: 'Command Line Tools của Apple' }), clt.installed ? tag('ok', 'Đã cài') : tag('warn', 'Chưa cài')),
+      h('p', { class: 'muted', text: 'acp cần git, và git trên Mac đi kèm bộ công cụ này của Apple.' }),
+      clt.installed ? null : h('div', { class: 'row' }, btn('Cài Command Line Tools', () => openFix('Cài Command Line Tools của Apple', { preview: 'setup.install-clt.preview', apply: 'setup.install-clt', args: {} }, 'confirm'), 'primary'))) : null;
     const homes = toArray(state.hooks && state.hooks.homes);
     const homeCard = h('article', { class: 'card' },
       h('h3', { text: 'Trợ lý AI trên máy' }),
@@ -595,7 +667,7 @@
         h('div', { class: 'row' }, h('b', { text: home.label }), home.exists ? tag('ok', home.skills + ' skill') : tag('info', 'Chưa cài')),
         tech(h('span', { class: 'cmd muted', text: home.folder }))))));
     return [h('p', { class: 'lead' }, term('AgentKit'), ' cài bộ skill và agent dựng sẵn vào từng dự án qua công cụ ak. Ở đây bạn xem phiên bản, kênh và các trợ lý AI trên máy.'),
-      moduleFindings('agentkit'), h('div', { class: 'grid' }, akCard, channelCard, homeCard)];
+      moduleFindings('agentkit'), h('div', { class: 'grid' }, akCard, channelCard, cliCard, cltCard, homeCard)];
   }
 
   function hookState(s) {
@@ -646,6 +718,24 @@
         h('span', { class: 'muted', text: s.source }),
         s.remote ? null : h('span', { class: 'cmd', text: s.command })))) : h('p', { class: 'muted', text: 'Chưa cấu hình máy chủ MCP nào.' }),
       h('p', { class: 'muted', text: 'Chỉ hiện tên và lệnh; tham số, biến môi trường và địa chỉ có thể chứa khoá bí mật nên không hiện.' }));
+    const conn = dataOf(state.connect);
+    const agents = toArray(conn.agents);
+    const AGENT = { claude: 'Claude Code', codex: 'Codex' };
+    const AGENT_STATE = {
+      ok: ['ok', 'Đã kết nối'], missing: ['info', 'Chưa kết nối'], stale: ['warn', 'Cần cập nhật'], 'not installed': ['info', 'Chưa cài'],
+    };
+    const connectCard = h('article', { class: 'card' },
+      h('h3', { text: 'Kết nối trợ lý AI' }),
+      h('p', { class: 'muted' }, 'Cho Claude Code và Codex dùng máy chủ ', term('MCP'), ' của acp để xem tình trạng và giải thích lỗi. Máy chủ này chỉ đọc, không tự thay đổi gì.'),
+      state.connect && state.connect.error ? h('div', { class: 'notice error', text: state.connect.error }) : null,
+      agents.length ? h('div', { class: 'list' }, agents.map((ag) => {
+        const st = AGENT_STATE[ag.state] || ['info', ag.state];
+        return h('div', {}, h('div', { class: 'row' }, h('b', { text: AGENT[ag.name] || ag.name }), tag(st[0], st[1])),
+          tech(ag.cli ? h('span', { class: 'cmd muted', text: ag.cli }) : null));
+      })) : null,
+      agents.some((ag) => ag.state === 'missing' || ag.state === 'stale')
+        ? h('div', { class: 'row' }, btn('Kết nối', () => openFix('Kết nối trợ lý AI với acp', { preview: 'connect.preview', apply: 'connect.apply', args: {} }, 'confirm'), 'primary'))
+        : null);
     const g = previewLines(state.global);
     const globalCard = h('article', { class: 'card' },
       h('div', { class: 'row' }, h('h3', { text: 'Skill dùng chung cho tài khoản' }), g.changes.length || g.issues.length ? tag('warn', 'Chưa khớp') : tag('ok', 'Khớp')),
@@ -654,7 +744,7 @@
       g.issues.length ? lineList(g.issues.slice(0, 8), 'issues', '!') : null,
       h('div', { class: 'row' }, btn('Áp dụng', () => openFix('Gắn skill dùng chung', { preview: 'global.preview', apply: 'global.apply', args: {} }, 'safe'))));
     return [h('p', { class: 'lead' }, term('hook'), ', máy chủ ', term('MCP'), ' và cài đặt dùng chung của các trợ lý AI trên máy.'),
-      moduleFindings('hooks'), h('div', { class: 'grid' }, acpCard, globalCard, mcpCard), h('h2', { text: 'Tệp cài đặt' }),
+      moduleFindings('hooks'), h('div', { class: 'grid' }, acpCard, connectCard, globalCard, mcpCard), h('h2', { text: 'Tệp cài đặt' }),
       settingsCards.length ? h('div', { class: 'grid' }, settingsCards) : h('div', { class: 'empty', text: 'Không tìm thấy tệp cài đặt nào.' })];
   }
 
@@ -700,10 +790,16 @@
 
   function renderSignIn() {
     closeSheet();
-    document.getElementById('app').replaceChildren(h('div', { class: 'shell' }, h('div', { class: 'card signin' },
-      h('h1', { text: 'Mở lại acp web' }),
-      h('p', { text: 'Phiên này đã hết hoặc liên kết đăng nhập đã được dùng. Chạy lại lệnh dưới đây trong terminal rồi mở liên kết nó in ra.' }),
-      h('pre', { text: 'acp web' }))));
+    const card = inApp
+      ? h('div', { class: 'card signin' },
+        h('h1', { text: 'Phiên làm việc đã hết' }),
+        h('p', { text: 'Bấm nút dưới đây để mở một phiên mới.' }),
+        h('div', { class: 'row' }, btn('Đăng nhập lại', restartApp, 'primary')))
+      : h('div', { class: 'card signin' },
+        h('h1', { text: 'Mở lại acp web' }),
+        h('p', { text: 'Phiên này đã hết hoặc liên kết đăng nhập đã được dùng. Chạy lại lệnh dưới đây trong terminal rồi mở liên kết nó in ra.' }),
+        h('pre', { text: 'acp web' }));
+    document.getElementById('app').replaceChildren(h('div', { class: 'shell' }, card));
   }
 
   async function boot() {

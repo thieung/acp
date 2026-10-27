@@ -202,3 +202,50 @@ func TestHooksRecogniseTheirOwnCommandWhateverTheBinaryIsCalled(t *testing.T) {
 		t.Fatalf("after uninstall: %q", got)
 	}
 }
+
+func TestLinkCLIAndHooksRefuseAPathThatVanishes(t *testing.T) {
+	t.Run("home on a second volume", func(t *testing.T) {
+		t.Setenv("HOME", "/Volumes/Data/Users/me")
+		if err := lastingBinary("/Volumes/Data/Users/me/Applications/acp.app/Contents/Helpers/acp"); err != nil {
+			t.Errorf("~/Applications on a second volume refused: %v", err)
+		}
+		if err := lastingBinary("/Volumes/Data/Users/me/Downloads/acp.app/Contents/Helpers/acp"); err == nil {
+			t.Error("Downloads on a second volume accepted")
+		}
+	})
+	app := "move acp.app to Applications"
+	// Not under the temp folder, which is refused on its own.
+	home := "/Users/acp-test-home"
+	t.Setenv("HOME", home)
+	for path, want := range map[string]string{
+		"/Volumes/acp/acp.app/Contents/Helpers/acp":                                         app,
+		"/Volumes/Data/Applications/acp.app/Contents/Helpers/acp":                           app,
+		"/private/var/folders/x/y/T/AppTranslocation/0A1B/d/acp.app/Contents/Helpers/acp":   app,
+		filepath.Join(os.TempDir(), "AppTranslocation/0A1B/d/acp.app/Contents/Helpers/acp"): "runs from a temporary folder",
+		"/Users/me/Downloads/acp.app/Contents/Helpers/acp":                                  app,
+		"/Users/me/Desktop/acp.app/Contents/Helpers/acp":                                    app,
+		"/Applications.old/acp.app/Contents/Helpers/acp":                                    app,
+		filepath.Join(os.TempDir(), "go-build123/b001/exe/acp"):                             "temporary",
+		filepath.Join(os.TempDir(), "acp.app/Contents/Helpers/acp"):                         app,
+		"/Users/me/Library/Caches/go-build/acp":                                             "temporary",
+		"/Volumes/stick/go-build/acp":                                                       "temporary",
+		// A tool or a home on a second volume is not going anywhere.
+		"/Volumes/stick/bin/acp":                                         "",
+		"/Volumes/Data/Users/me/.local/bin/acp":                          "",
+		"/Applications/acp.app/Contents/Helpers/acp":                     "",
+		"/Applications/Tools/acp.app/Contents/Helpers/acp":               "",
+		filepath.Join(home, "Applications/acp.app/Contents/Helpers/acp"): "",
+		"/usr/local/bin/acp":                                             "",
+	} {
+		err := lastingBinary(path)
+		if want == "" {
+			if err != nil {
+				t.Errorf("%s refused: %v", path, err)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), path) {
+			t.Errorf("%s: %v, want %q", path, err, want)
+		}
+	}
+}

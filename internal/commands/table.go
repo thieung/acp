@@ -21,7 +21,8 @@ const overview = `acp: see and sync agent skills across your projects.
   acp doctor               like status, but exits 1 when anything needs a sync
   acp skills list|set ID   show or change a project's skills (set previews until --apply)
   acp kit add ID           give a project AgentKit (previews until --apply)
-  acp setup [install-ak|login]  check, install or sign in to the ak CLI
+  acp setup [install-ak|login|link-cli|install-clt]  ak CLI, sign-in, terminal acp, Apple's tools
+  acp connect              register acp mcp with Claude Code and Codex (previews until --apply)
   acp init                 create or adopt a control plane (no personal skills)
   acp scan                 read-only health check with plain-language findings
   acp explain CODE         what a scan finding means and how to fix it
@@ -103,11 +104,14 @@ func init() {
 			pos:   []posSpec{{name: "action", choices: []string{"add"}}, {name: "id", help: "project id"}},
 			flags: []flagSpec{kitFlag, channel, targets, apply, noFix}, run: cmdKit},
 		{name: "setup", help: "check, install or sign in to the ak CLI", action: true,
-			pos: []posSpec{{name: "action", optional: true, def: "check", choices: []string{"check", "install-ak", "login"}}},
+			pos: []posSpec{{name: "action", optional: true, def: "check", choices: []string{"check", "install-ak", "login", "link-cli", "install-clt"}}},
 			flags: []flagSpec{
 				{name: "channel", kind: strFlag, choices: []string{"stable", "beta"}, help: "install-ak: default is the fleet's channel"},
 				{name: "version", kind: strFlag, help: "install-ak: pin an ak CLI version (not the kit version)"},
-				{name: "apply", kind: boolFlag, help: "install-ak: download and run; default is a plan"}}, run: cmdSetup},
+				{name: "apply", kind: boolFlag, help: "install-ak, link-cli, install-clt: make the change; default is a preview"},
+				{name: "api-key-stdin", kind: boolFlag, help: "login: read an AgentKit API key from stdin; no terminal needed"}}, run: cmdSetup},
+		{name: "connect", help: "register acp mcp with Claude Code and Codex",
+			flags: []flagSpec{{name: "apply", kind: boolFlag, help: "register it; default is a preview"}}, run: cmdConnect},
 		{name: "init", help: "create or adopt a control plane",
 			flags: []flagSpec{{name: "root", kind: strFlag, meta: "PATH", help: "where (default: ~/agent-control-plane)"}, dryRun}, run: cmdInit},
 		{name: "scan", help: "read-only health check with plain-language findings",
@@ -120,7 +124,8 @@ func init() {
 		{name: "web", help: "local dashboard on 127.0.0.1", server: true,
 			flags: []flagSpec{{name: "port", kind: intFlag, def: "8780", help: "port (0: any free port)"},
 				{name: "no-open", kind: boolFlag, help: "do not open a browser"},
-				{name: "print-url", kind: boolFlag, help: "print the sign-in URL even without a terminal"}}, run: cmdWeb},
+				{name: "print-url", kind: boolFlag, help: "print the sign-in URL even without a terminal"},
+				{name: "exit-with-parent", kind: boolFlag, help: "stop when stdin closes (for an app that runs acp web)"}}, run: cmdWeb},
 		{name: "mcp", help: "MCP server on stdio with read and preview tools", server: true, run: cmdMCP},
 	}
 }

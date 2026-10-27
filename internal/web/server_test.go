@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -247,11 +248,11 @@ func TestOneMutationAtATime(t *testing.T) {
 	f := testkit.New(t)
 	release := make(chan struct{})
 	self := core.SelfRunner(acpBin, f.Base)
-	run := func(ctx context.Context, args ...string) ([]byte, error) {
+	run := func(ctx context.Context, stdin []byte, args ...string) ([]byte, error) {
 		if args[0] == "global" && !slices.Contains(args, "--check") {
 			<-release
 		}
-		return self(ctx, args...)
+		return self(ctx, stdin, args...)
 	}
 	c := start(t, f, run)
 	c.signIn()
@@ -300,7 +301,7 @@ func TestScanResultIsKeptAndServedAsJSON(t *testing.T) {
 
 func TestEveryApplyKindHasAPreviewAndADescribedCommand(t *testing.T) {
 	f := testkit.New(t)
-	out, err := core.SelfRunner(acpBin, f.Base)(context.Background(), "describe", "--json")
+	out, err := core.SelfRunner(acpBin, f.Base)(context.Background(), nil, "describe", "--json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +335,7 @@ func TestEveryApplyKindHasAPreviewAndADescribedCommand(t *testing.T) {
 
 // fakeRun answers each acp command from a table of envelopes keyed by the command's first words.
 func fakeRun(envs map[string]string) core.Runner {
-	return func(_ context.Context, args ...string) ([]byte, error) {
+	return func(_ context.Context, _ []byte, args ...string) ([]byte, error) {
 		for k, v := range envs {
 			if strings.HasPrefix(strings.Join(args, " "), k) {
 				return []byte(v), nil
@@ -390,5 +391,491 @@ func TestUpgradeCarriesTheChannelAndKit(t *testing.T) {
 	}
 	if kinds["upgrade"].check(nil, args{Channel: "nightly"}) == nil {
 		t.Error("a channel the CLI does not know was accepted")
+	}
+}
+
+// fakeKey is an obvious fake in the shape of an AgentKit key; badKey is one the fake ak refuses.
+const (
+	fakeKey = "ak_live_FAKEKEY0000000000"
+	badKey  = "ak_live_badFAKEKEY000000000"
+)
+
+func TestLoginEndpointSignsIn(t *testing.T) {
+	f := testkit.New(t)
+	c := start(t, f, nil)
+	c.signIn()
+	code, body, _ := c.do("POST", "/api/login", map[string]string{"key": fakeKey}, nil)
+	var env struct {
+		Data struct {
+			Login struct {
+				Authenticated bool
+				Method        string
+			}
+		}
+	}
+	if code != 200 || json.Unmarshal(body, &env) != nil || !env.Data.Login.Authenticated || env.Data.Login.Method != "api_key" {
+		t.Fatalf("login: %d %s", code, body)
+	}
+	if code, body, _ := c.do("GET", "/api/setup", nil, nil); code != 200 || !strings.Contains(string(body), `"authenticated":true`) {
+		t.Fatalf("setup after sign-in: %d %s", code, body)
+	}
+}
+
+func TestLoginEndpointBadKeyIsNotSuccess(t *testing.T) {
+	f := testkit.New(t)
+	c := start(t, f, nil)
+	c.signIn()
+	code, body, _ := c.do("POST", "/api/login", map[string]string{"key": badKey}, nil)
+	var env struct{ Error string }
+	if code != http.StatusBadRequest || json.Unmarshal(body, &env) != nil || !strings.HasPrefix(env.Error, "sign-in failed") {
+		t.Fatalf("bad key: %d %s", code, body)
+	}
+	if strings.Contains(string(body), badKey) {
+		t.Fatalf("the key is in the response: %s", body)
+	}
+}
+
+func TestLoginEndpointNeverKeepsTheKey(t *testing.T) {
+	f := testkit.New(t)
+	c := start(t, f, nil)
+	c.signIn()
+	var bodies []string
+	for _, key := range []string{badKey, fakeKey} {
+		_, body, _ := c.do("POST", "/api/login", map[string]string{"key": key}, nil)
+		bodies = append(bodies, string(body))
+	}
+	c.run("scan", nil, "")
+	for _, p := range []string{"/api/setup", "/api/status", "/api/scan"} {
+		_, body, _ := c.do("GET", p, nil, nil)
+		bodies = append(bodies, string(body))
+	}
+	c.srv.mu.Lock()
+	ops, _ := json.Marshal(c.srv.ops)
+	kept := fmt.Sprint(c.srv.sessions, c.srv.order) + string(ops) + string(c.srv.lastScan)
+	c.srv.mu.Unlock()
+	for name, s := range map[string]string{"responses": strings.Join(bodies, "\n"), "server state": kept,
+		".ak-calls": f.Read(filepath.Join(f.Base, ".ak-calls"))} {
+		for _, key := range []string{fakeKey, badKey} {
+			if strings.Contains(s, key) {
+				t.Errorf("%s keep the key %s: %s", name, key, s)
+			}
+		}
+	}
+}
+
+func TestLoginEndpointRequiresSession(t *testing.T) {
+	called := false
+	c := start(t, testkit.New(t), func(context.Context, []byte, ...string) ([]byte, error) {
+		called = true
+		return nil, nil
+	})
+	if code, _, _ := c.do("POST", "/api/login", map[string]string{"key": fakeKey}, nil); code != http.StatusUnauthorized || called {
+		t.Fatalf("login without a session: %d (runner called: %v)", code, called)
+	}
+}
+
+func TestLoginEndpointBusy(t *testing.T) {
+	called := false
+	c := start(t, testkit.New(t), func(context.Context, []byte, ...string) ([]byte, error) {
+		called = true
+		return nil, nil
+	})
+	c.signIn()
+	c.srv.mu.Lock()
+	c.srv.busy = true
+	c.srv.mu.Unlock()
+	if code, _, _ := c.do("POST", "/api/login", map[string]string{"key": fakeKey}, nil); code != http.StatusConflict || called {
+		t.Fatalf("login while a change runs: %d (runner called: %v)", code, called)
+	}
+}
+
+func TestLoginEndpointRejectsEmptyKey(t *testing.T) {
+	called := false
+	c := start(t, testkit.New(t), func(context.Context, []byte, ...string) ([]byte, error) {
+		called = true
+		return nil, nil
+	})
+	c.signIn()
+	for _, body := range []any{map[string]string{"key": ""}, map[string]string{"key": "  \n"}, map[string]any{}, "nope"} {
+		if code, out, _ := c.do("POST", "/api/login", body, nil); code != http.StatusBadRequest {
+			t.Errorf("%v: %d %s", body, code, out)
+		}
+	}
+	if called {
+		t.Fatal("the runner ran without a key")
+	}
+}
+
+func TestLoginEndpointClearsBusyOnError(t *testing.T) {
+	var got []string
+	var stdin []byte
+	c := start(t, testkit.New(t), func(_ context.Context, in []byte, args ...string) ([]byte, error) {
+		got, stdin = args, slices.Clone(in)
+		return nil, fmt.Errorf("acp %s: exit status 2", args[0])
+	})
+	c.signIn()
+	if code, body, _ := c.do("POST", "/api/login", map[string]string{"key": fakeKey}, nil); code != http.StatusBadGateway {
+		t.Fatalf("runner error: %d %s", code, body)
+	}
+	if strings.Join(got, " ") != "setup login --api-key-stdin --json" || string(stdin) != fakeKey {
+		t.Fatalf("runner got %v with stdin %q", got, stdin)
+	}
+	c.srv.mu.Lock()
+	busy := c.srv.busy
+	c.srv.mu.Unlock()
+	if busy {
+		t.Fatal("busy stays set after a failed sign-in")
+	}
+}
+
+func TestLoginEndpointSurvivesClientCancel(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	ctxErr := make(chan error, 1)
+	c := start(t, testkit.New(t), func(ctx context.Context, _ []byte, _ ...string) ([]byte, error) {
+		close(entered)
+		<-release
+		ctxErr <- ctx.Err()
+		return []byte(`{"schema_version":1,"kind":"acp.setup.login","data":{"login":{"authenticated":true}},"exit_code":0}`), nil
+	})
+	c.signIn()
+	ctx, cancel := context.WithCancel(context.Background())
+	b, _ := json.Marshal(map[string]string{"key": fakeKey})
+	req, _ := http.NewRequestWithContext(ctx, "POST", c.base+"/api/login", bytes.NewReader(b))
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	done := make(chan struct{})
+	go func() {
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			resp.Body.Close()
+		}
+		close(done)
+	}()
+	select {
+	case <-entered:
+	case <-done:
+		t.Fatal("the request ended before the sign-in ran")
+	}
+	cancel()
+	<-done
+	time.Sleep(100 * time.Millisecond) // let the server notice the closed connection
+	close(release)
+	if err := <-ctxErr; err != nil {
+		t.Fatalf("the sign-in was cancelled with the request: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		c.srv.mu.Lock()
+		busy := c.srv.busy
+		c.srv.mu.Unlock()
+		if !busy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("busy stays set after the sign-in finished")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestLinkCLIPreviewsAndAppliesFromTheDashboard(t *testing.T) {
+	f := testkit.New(t)
+	// The server's own binary is what gets linked, so it must live outside a temporary folder.
+	t.Setenv("TMPDIR", filepath.Join(f.Base, "tmp"))
+	os.MkdirAll(filepath.Join(f.Base, "tmp"), 0o755)
+	data, err := os.ReadFile(acpBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(f.Base, "app/acp")
+	f.Write(bin, "")
+	if err := os.WriteFile(bin, data, 0o755); err != nil || os.Chmod(bin, 0o755) != nil {
+		t.Fatal(err)
+	}
+	self, _ := filepath.EvalSymlinks(bin)
+	dest := filepath.Join(f.Home, ".local/bin/acp")
+	c := start(t, f, core.SelfRunner(bin, f.Base))
+	c.signIn()
+	code, prev := c.run("setup.link-cli.preview", nil, "")
+	d, _ := prev.Envelope["data"].(map[string]any)
+	logs, _ := d["logs"].([]any)
+	if code != http.StatusAccepted || prev.Digest == "" || len(logs) != 1 ||
+		fmt.Sprint(logs[0].(map[string]any)["changes"]) != "[+ "+dest+" -> "+self+"]" {
+		t.Fatalf("preview: %d %+v", code, prev)
+	}
+	if code, done := c.run("setup.link-cli", nil, prev.Digest); code != http.StatusAccepted || done.Envelope["exit_code"] != float64(0) {
+		t.Fatalf("apply: %d %+v", code, done)
+	}
+	if got, _ := os.Readlink(dest); got != self {
+		t.Fatalf("link %q, want %q", got, self)
+	}
+	for kind, want := range map[string]string{"setup.install-clt.preview": "setup install-clt",
+		"setup.install-clt": "setup install-clt --apply", "setup.link-cli": "setup link-cli --apply"} {
+		if got := strings.Join(kinds[kind].argv(args{}), " "); got != want {
+			t.Errorf("%s runs %q, want %q", kind, got, want)
+		}
+	}
+}
+
+func TestConnectPreviewsAndAppliesFromTheDashboard(t *testing.T) {
+	f := testkit.New(t)
+	t.Setenv("TMPDIR", filepath.Join(f.Base, "tmp"))
+	os.MkdirAll(filepath.Join(f.Base, "tmp"), 0o755)
+	bin := filepath.Join(f.Base, "app/acp")
+	f.Write(bin, "")
+	data, err := os.ReadFile(acpBin)
+	if err != nil || os.WriteFile(bin, data, 0o755) != nil || os.Chmod(bin, 0o755) != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ACP_BIN", bin)
+	c := start(t, f, nil)
+	c.signIn()
+	code, prev := c.run("connect.preview", nil, "")
+	d, _ := prev.Envelope["data"].(map[string]any)
+	if code != http.StatusAccepted || prev.Digest == "" || fmt.Sprint(d["agents"]) !=
+		"[map[cli:"+f.Claude+" name:claude state:missing] map[cli:"+f.Codex+" name:codex state:missing]]" {
+		t.Fatalf("preview: %d %+v", code, prev)
+	}
+	if f.Exists(filepath.Join(f.Home, ".fake-claude-calls")) {
+		t.Fatal("the preview ran claude")
+	}
+	if code, done := c.run("connect.apply", nil, prev.Digest); code != http.StatusAccepted || done.Envelope["exit_code"] != float64(0) {
+		t.Fatalf("apply: %d %+v", code, done)
+	}
+	if got := f.Read(filepath.Join(f.Home, ".fake-claude-calls")); got != "mcp add --scope user acp -- "+bin+" mcp\n" {
+		t.Fatalf("claude calls %q", got)
+	}
+	for kind, want := range map[string]string{"connect.preview": "connect", "connect.apply": "connect --apply"} {
+		if got := strings.Join(kinds[kind].argv(args{}), " "); got != want {
+			t.Errorf("%s runs %q, want %q", kind, got, want)
+		}
+	}
+}
+
+func TestShutdownWaitsForRunningOp(t *testing.T) {
+	f := testkit.New(t)
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	c := start(t, f, func(_ context.Context, _ []byte, args ...string) ([]byte, error) {
+		if args[0] == "scan" {
+			started <- struct{}{}
+			<-release
+		}
+		return []byte(`{"schema_version":1,"kind":"acp.x","data":{"text":""},"exit_code":0}`), nil
+	})
+	c.signIn()
+	if c.srv.Running() {
+		t.Fatal("running before any operation")
+	}
+	if code, out, _ := c.do("POST", "/api/run", map[string]any{"kind": "scan"}, nil); code != http.StatusAccepted {
+		t.Fatalf("run: %d %s", code, out)
+	}
+	<-started
+	if !c.srv.Running() {
+		t.Fatal("Running is false while an operation runs")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := c.srv.Wait(ctx); err != context.DeadlineExceeded {
+		t.Fatalf("Wait returned %v before the operation ended", err)
+	}
+	waited := make(chan error, 1)
+	go func() { waited <- c.srv.Wait(context.Background()) }()
+	select {
+	case err := <-waited:
+		t.Fatalf("Wait returned %v before the operation ended", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case err := <-waited:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait did not return after the operation ended")
+	}
+	if c.srv.Running() {
+		t.Fatal("Running is true after the operation ended")
+	}
+	if err := c.srv.Wait(context.Background()); err != nil {
+		t.Fatalf("Wait with nothing running: %v", err)
+	}
+}
+
+func TestShutdownWaitsForASignIn(t *testing.T) {
+	f := testkit.New(t)
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	c := start(t, f, func(_ context.Context, _ []byte, args ...string) ([]byte, error) {
+		started <- struct{}{}
+		<-release
+		return []byte(`{"schema_version":1,"kind":"acp.setup.login","data":{"login":{"authenticated":true}},"exit_code":0}`), nil
+	})
+	c.signIn()
+	go c.do("POST", "/api/login", map[string]string{"key": "ak_live_FAKEKEY0000000000"}, nil)
+	<-started
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if !c.srv.Running() || c.srv.Wait(ctx) != context.DeadlineExceeded {
+		t.Fatal("a running sign-in does not count as running")
+	}
+	close(release)
+	if err := c.srv.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The web sign-in must outlast everything `acp setup login` may wait for, so its own deadline never
+// fires while ak is still working.
+func TestLoginTimeoutOutlastsTheChild(t *testing.T) {
+	// Each Exec may add about 4 s after its deadline: SIGTERM, a 2 s wait, then the group kill.
+	if inner := core.AKLoginTimeout + core.AKWhoamiTimeout + 10*time.Second; loginTimeout <= inner {
+		t.Fatalf("loginTimeout %v must exceed the child's own bounds %v", loginTimeout, inner)
+	}
+}
+
+// When the web sign-in gives up, ak must be gone with it and the message must read well.
+func TestLoginTimeoutStopsAk(t *testing.T) {
+	f := testkit.New(t)
+	pidFile := filepath.Join(f.Base, "ak.pid")
+	f.Executable(f.AK, "#!/bin/sh\necho $$ > '"+pidFile+"'\nexec sleep 30\n")
+	old := loginTimeout
+	loginTimeout = 1500 * time.Millisecond
+	t.Cleanup(func() { loginTimeout = old })
+	c := start(t, f, core.SelfRunner(acpBin, f.Base))
+	c.signIn()
+	code, body, _ := c.do("POST", "/api/login", map[string]string{"key": fakeKey}, nil)
+	if code != http.StatusGatewayTimeout || !strings.Contains(string(body), "quá lâu") || strings.Contains(string(body), "0s") {
+		t.Fatalf("login past its deadline: %d %s", code, body)
+	}
+	var pid int
+	fmt.Sscan(f.Read(pidFile), &pid)
+	if pid == 0 {
+		t.Fatal("the fake ak did not start")
+	}
+	t.Cleanup(func() { syscall.Kill(pid, syscall.SIGKILL) })
+	for i := 0; syscall.Kill(pid, 0) == nil; i++ {
+		if i > 40 {
+			t.Fatalf("ak %d outlived the sign-in", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// GET /api/running is what the desktop app asks before it quits: true while an operation or a
+// sign-in runs.
+func TestRunningEndpoint(t *testing.T) {
+	f := testkit.New(t)
+	started, release := make(chan struct{}, 2), make(chan struct{})
+	c := start(t, f, func(_ context.Context, _ []byte, args ...string) ([]byte, error) {
+		if args[0] == "scan" || args[0] == "setup" || (args[0] == "global" && !slices.Contains(args, "--check")) {
+			started <- struct{}{}
+			<-release
+		}
+		return []byte(`{"schema_version":1,"kind":"acp.x","data":{"text":""},"exit_code":0}`), nil
+	})
+	running := func() bool {
+		t.Helper()
+		code, body, _ := c.do("GET", "/api/running", nil, nil)
+		var out map[string]any
+		if code != http.StatusOK || json.Unmarshal(body, &out) != nil || len(out) != 1 {
+			t.Fatalf("running: %d %s", code, body)
+		}
+		b, ok := out["running"].(bool)
+		if !ok {
+			t.Fatalf("running is not a boolean: %s", body)
+		}
+		return b
+	}
+	if code, _, _ := c.do("GET", "/api/running", nil, nil); code != http.StatusUnauthorized {
+		t.Fatalf("signed out: %d", code)
+	}
+	c.signIn()
+	if running() {
+		t.Fatal("running while idle")
+	}
+
+	if code, out, _ := c.do("POST", "/api/run", map[string]any{"kind": "scan"}, nil); code != http.StatusAccepted {
+		t.Fatalf("run: %d %s", code, out)
+	}
+	<-started
+	if running() {
+		t.Fatal("a scan counts as a change")
+	}
+	release <- struct{}{}
+	waitIdle(t, c)
+
+	_, g := c.run("global.preview", nil, "")
+	if code, out, _ := c.do("POST", "/api/run", map[string]any{"kind": "global.apply", "digest": g.Digest}, nil); code != http.StatusAccepted {
+		t.Fatalf("global.apply: %d %s", code, out)
+	}
+	<-started
+	if !running() {
+		t.Fatal("not running while a change runs")
+	}
+	release <- struct{}{}
+	waitIdle(t, c)
+	if running() {
+		t.Fatal("running after the change ended")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.do("POST", "/api/login", map[string]string{"key": fakeKey}, nil)
+	}()
+	<-started
+	if !running() {
+		t.Fatal("not running while a sign-in runs")
+	}
+	release <- struct{}{}
+	<-done
+	if running() {
+		t.Fatal("running after the sign-in ended")
+	}
+}
+
+func waitIdle(t *testing.T, c *client) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.srv.Wait(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The key reaches acp exactly as the JSON string says, escapes and all, trimmed of spaces.
+func TestLoginEndpointDecodesTheKey(t *testing.T) {
+	var stdin []byte
+	c := start(t, testkit.New(t), func(_ context.Context, in []byte, args ...string) ([]byte, error) {
+		stdin = slices.Clone(in)
+		return []byte(`{"schema_version":1,"kind":"acp.setup.login","data":{},"exit_code":0}`), nil
+	})
+	c.signIn()
+	bs := `\` // a backslash, so the escapes below stay JSON escapes
+	for raw, want := range map[string]string{
+		`{"key":"  ak_live_` + bs + `u0041\/b\"c\\d` + bs + `u00e9` + bs + `ud83d` + bs + `ude00 \n"}`: "ak_live_A/b\"c\\d\u00e9\U0001F600",
+		`{"other":1,"key":"k"}`: "k",
+	} {
+		req, _ := http.NewRequest("POST", c.base+"/api/login", strings.NewReader(raw))
+		req.Header.Set("Authorization", "Bearer "+c.token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || string(stdin) != want {
+			t.Errorf("%s: %d, stdin %q, want %q", raw, resp.StatusCode, stdin, want)
+		}
+	}
+	stdin = nil
+	for _, raw := range []string{`{"key":"a\qb"}`, `{"key":"` + bs + `ud83d"}`, `{"key":"` + bs + `ud83d` + bs + `u0041"}`, `{"key":"` + bs + `u00g1"}`, `{"key":12}`, `{"key":["k"]}`, `{"key":"a` + "\x01" + `"}`, `{"key":null}`} {
+		req, _ := http.NewRequest("POST", c.base+"/api/login", strings.NewReader(raw))
+		req.Header.Set("Authorization", "Bearer "+c.token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest || stdin != nil {
+			t.Errorf("%s: %d, stdin %q", raw, resp.StatusCode, stdin)
+		}
 	}
 }
