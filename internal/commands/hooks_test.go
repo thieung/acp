@@ -202,3 +202,28 @@ func TestHooksRecogniseTheirOwnCommandWhateverTheBinaryIsCalled(t *testing.T) {
 		t.Fatalf("after uninstall: %q", got)
 	}
 }
+
+func TestLinkCLIAndHooksRefuseAPathThatVanishes(t *testing.T) {
+	app := "move acp.app to Applications"
+	for path, want := range map[string]string{
+		"/Volumes/acp/acp.app/Contents/Helpers/acp":                                       app,
+		"/private/var/folders/x/y/T/AppTranslocation/0A1B/d/acp.app/Contents/Helpers/acp": app,
+		"/Volumes/stick/bin/acp":                                                          "install.sh",
+		filepath.Join(os.TempDir(), "go-build123/b001/exe/acp"):                           "temporary",
+		filepath.Join(os.TempDir(), "acp.app/Contents/Helpers/acp"):                       app,
+		"/Users/me/Library/Caches/go-build/acp":                                           "temporary",
+		"/Applications/acp.app/Contents/Helpers/acp":                                      "",
+		"/usr/local/bin/acp":                                                              "",
+	} {
+		err := lastingBinary(path)
+		if want == "" {
+			if err != nil {
+				t.Errorf("%s refused: %v", path, err)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), path) {
+			t.Errorf("%s: %v, want %q", path, err, want)
+		}
+	}
+}

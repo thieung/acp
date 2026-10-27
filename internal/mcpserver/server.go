@@ -104,7 +104,7 @@ func (s *server) explainTool(_ context.Context, _ *mcp.CallToolRequest, in expla
 
 // acp runs one acp command with --json and returns its data, or its error as a tool error.
 func (s *server) acp(ctx context.Context, args ...string) (map[string]any, int, error) {
-	stdout, err := s.run(ctx, append(args, "--json")...)
+	stdout, err := s.run(ctx, nil, append(args, "--json")...)
 	if err != nil {
 		return nil, 0, err
 	}

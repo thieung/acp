@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"net/http"
 	"path"
@@ -18,6 +19,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/thieung/acp/internal/core"
 	"github.com/thieung/acp/internal/scan"
@@ -44,6 +46,8 @@ type Server struct {
 	order    []string
 	busy     bool
 	lastScan []byte
+	active   int           // operations and sign-ins still running
+	idle     chan struct{} // closed when active drops to 0; nil until someone waits
 }
 
 type operation struct {
@@ -81,6 +85,44 @@ func (s *Server) Code() string {
 	return s.code
 }
 
+// Running reports whether an operation or a sign-in is still running.
+func (s *Server) Running() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.active > 0
+}
+
+// Wait returns once no operation or sign-in is running, or with ctx's error. A shutdown calls it
+// after the listener is closed, so a change the user started is not cut off halfway through.
+func (s *Server) Wait(ctx context.Context) error {
+	s.mu.Lock()
+	if s.active == 0 {
+		s.mu.Unlock()
+		return nil
+	}
+	if s.idle == nil {
+		s.idle = make(chan struct{})
+	}
+	idle := s.idle
+	s.mu.Unlock()
+	select {
+	case <-idle:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// end counts one operation or sign-in as finished; each starts by raising active under mu.
+func (s *Server) end() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.active--; s.active == 0 && s.idle != nil {
+		close(s.idle)
+		s.idle = nil
+	}
+}
+
 // Handler serves the static page and the API behind the Host, Origin and session checks.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -94,6 +136,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/hooks", s.hooks)
 	mux.HandleFunc("GET /api/scan", s.scanResult)
 	mux.HandleFunc("POST /api/run", s.start)
+	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("GET /api/ops/{id}", s.op)
 	mux.HandleFunc("GET /", s.static)
 	return s.guard(mux)
@@ -185,9 +228,10 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"token": t})
 }
 
-// acp runs one command with --json and returns its envelope.
-func (s *Server) acp(ctx context.Context, args ...string) (json.RawMessage, error) {
-	out, err := s.run(ctx, append(slices.Clone(args), "--json")...)
+// acp runs one command with --json and returns its envelope. stdin, when not nil, is the child's
+// standard input.
+func (s *Server) acp(ctx context.Context, stdin []byte, args ...string) (json.RawMessage, error) {
+	out, err := s.run(ctx, stdin, append(slices.Clone(args), "--json")...)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +263,7 @@ func (s *Server) command(args ...string) http.HandlerFunc {
 }
 
 func (s *Server) respond(w http.ResponseWriter, r *http.Request, args ...string) {
-	env, err := s.acp(r.Context(), args...)
+	env, err := s.acp(r.Context(), nil, args...)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -256,7 +300,7 @@ func (s *Server) explain(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) hooks(w http.ResponseWriter, r *http.Request) {
-	env, err := s.acp(r.Context(), "hooks")
+	env, err := s.acp(r.Context(), nil, "hooks")
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -278,6 +322,69 @@ func (s *Server) scanResult(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, json.RawMessage(last))
+}
+
+// ------------------------------------------------------------------ sign-in
+
+// loginTimeout bounds one sign-in; it runs on its own context so a closed tab cannot cut it short.
+// It outlasts the child's own ak bounds (core.AKLoginTimeout plus core.AKWhoamiTimeout), so ak
+// normally answers or times out first; if it does fire, the child stops ak before it exits.
+var loginTimeout = 2 * time.Minute
+
+// login signs in to AgentKit with an API key. It has nothing to preview, so it needs no digest,
+// but it still waits its turn behind any other change. The key reaches acp only on stdin: it is
+// never in argv, an operation or a session, and its bytes are cleared once acp has run.
+func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	defer clear(body)
+	var in struct {
+		Key string `json:"key"`
+	}
+	if err != nil || json.Unmarshal(body, &in) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	key := []byte(strings.TrimSpace(in.Key))
+	defer clear(key)
+	if len(key) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nhập API key của AgentKit"})
+		return
+	}
+	s.mu.Lock()
+	if s.busy {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "một thay đổi khác đang chạy; đợi nó xong"})
+		return
+	}
+	s.busy = true
+	s.active++
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.busy = false
+		s.mu.Unlock()
+		s.end()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), loginTimeout)
+	defer cancel()
+	env, err := s.acp(ctx, key, "setup", "login", "--api-key-stdin")
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "đăng nhập quá lâu không xong; kiểm tra mạng rồi thử lại"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	var e struct {
+		ExitCode int `json:"exit_code"`
+	}
+	if failed(env) || json.Unmarshal(env, &e) != nil || e.ExitCode != 0 {
+		writeJSON(w, http.StatusBadRequest, env)
+		return
+	}
+	writeJSON(w, http.StatusOK, env)
 }
 
 // ------------------------------------------------------------------ runs
@@ -335,7 +442,7 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	// Preview again under the busy flag: the change runs only if the machine still looks the same.
-	env, err := s.acp(r.Context(), kinds[k.preview].argv(in.Args)...)
+	env, err := s.acp(r.Context(), nil, kinds[k.preview].argv(in.Args)...)
 	if err == nil && !failed(env) && digest(env) == in.Digest {
 		id := s.launch(in.Kind, k.argv(in.Args), tok, "", func() {
 			s.mu.Lock()
@@ -381,9 +488,11 @@ func (s *Server) launch(kind string, argv []string, tok, key string, done func()
 		delete(s.ops, s.order[i])
 		s.order = slices.Delete(s.order, i, i+1)
 	}
+	s.active++
 	s.mu.Unlock()
 	go func() {
-		env, err := s.acp(context.Background(), argv...)
+		defer s.end()
+		env, err := s.acp(context.Background(), nil, argv...)
 		s.mu.Lock()
 		o.State = "done"
 		if err != nil {

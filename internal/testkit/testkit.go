@@ -14,8 +14,26 @@ import (
 // FakeAK stands in for the AgentKit CLI. `kit init|refresh` records the call in .ak-calls, writes
 // ak-cook (and .claude/agents for claude-code) and an install manifest; it fails like ak when
 // .agentkit/BROKEN exists, when .codex/hooks.json is a symlink or when ak-cook is a symlink.
-// `changelog` reports 9.9.9-beta.1.
+// `changelog` reports 9.9.9-beta.1. `login` records its argv and the names (never the values) of
+// key-like env vars, reads the key from stdin and keeps only its sha256 in $HOME/.ak-login; a key
+// containing "bad" fails like ak, echoing the key to stderr so tests prove acp does not pass it
+// on. `whoami` reports that sign-in in the shape of `ak whoami --json`.
 const FakeAK = `#!/bin/sh
+if [ "$1" = login ]; then
+  echo "login $(echo "$@" | cut -d' ' -f2-) $(env | cut -d= -f1 | grep -E 'AGENTKIT|API_KEY' | tr '\n' ' ')" >> .ak-calls
+  key=$(cat)
+  case "$key" in *bad*)
+    echo '{"error":"invalid key <stdin>"}'; echo "invalid key $key" >&2; exit 1 ;;
+  esac
+  if command -v sha256sum >/dev/null; then sum=$(printf %s "$key" | sha256sum); else sum=$(printf %s "$key" | shasum -a 256); fi
+  echo "${sum%% *}" > "$HOME/.ak-login"
+  exit 0
+fi
+if [ "$1" = whoami ]; then
+  if [ -s "$HOME/.ak-login" ]; then auth=true; method='"api_key"'; else auth=false; method=null; fi
+  echo '{"schema_version":1,"kind":"whoami","data":{"authenticated":'$auth',"authMethod":'$method',"licenses":[]}}'
+  exit 0
+fi
 if [ "$1" = kit ] && [ -e .agentkit/BROKEN ]; then
   echo "error: install blocked by .agentkit/BROKEN" >&2; exit 1
 fi
@@ -54,12 +72,75 @@ fi
 exit 0
 `
 
+// FakeClaude stands in for the Claude Code CLI. `mcp add` and `mcp remove` append their argv to
+// $HOME/.fake-claude-calls and change the user-scope mcpServers of ~/.claude.json like claude does
+// (add refuses a name that exists), so acp reads the result from the real file. Any other call is
+// recorded as UNEXPECTED and fails. The JSON is rewritten with perl's core JSON::PP.
+const FakeClaude = `#!/bin/sh
+calls="$HOME/.fake-claude-calls"
+case "$1 $2" in
+  "mcp add"|"mcp remove") echo "$*" >> "$calls" ;;
+  *) echo "UNEXPECTED $*" >> "$calls"; exit 1 ;;
+esac
+op=$2; shift 2
+scope=local; name=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --scope|-s) scope=$2; shift 2 ;;
+    --) shift; break ;;
+    *) if [ -z "$name" ]; then name=$1; shift; else break; fi ;;
+  esac
+done
+exec perl -MJSON::PP -e '
+my ($file, $op, $scope, $name, @cmd) = @ARGV;
+die "fake claude: only --scope user\n" if $scope ne "user";
+my $data = {};
+if (-e $file) { local $/; open(my $in, "<", $file) or die; $data = decode_json(<$in>); }
+my $servers = $data->{mcpServers} ||= {};
+if ($op eq "add") {
+  die "MCP server $name already exists in user config\n" if exists $servers->{$name};
+  $servers->{$name} = {type => "stdio", command => $cmd[0], args => [@cmd[1..$#cmd]], env => {}};
+} else {
+  die "No user-scoped MCP server found with name: $name\n" unless delete $servers->{$name};
+}
+open(my $out, ">", $file) or die; print $out JSON::PP->new->pretty->encode($data);
+' "${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json" "$op" "$scope" "$name" "$@"
+`
+
+// FakeCodex stands in for the Codex CLI: `mcp add NAME -- CMD ARGS...` appends a [mcp_servers.NAME]
+// table to ~/.codex/config.toml and `mcp remove NAME` drops it, each recording its argv in
+// $HOME/.fake-codex-calls. Any other call is recorded as UNEXPECTED and fails.
+const FakeCodex = `#!/bin/sh
+calls="$HOME/.fake-codex-calls"
+case "$1 $2" in
+  "mcp add"|"mcp remove") echo "$*" >> "$calls" ;;
+  *) echo "UNEXPECTED $*" >> "$calls"; exit 1 ;;
+esac
+config="${CODEX_HOME:-$HOME/.codex}/config.toml"
+op=$2; name=$3; shift 3
+has() { [ -f "$config" ] && grep -qx "\[mcp_servers\.$name\]" "$config"; }
+if [ "$op" = add ]; then
+  if has; then echo "MCP server $name already exists" >&2; exit 1; fi
+  [ "$1" = -- ] && shift
+  command=$1; shift
+  list=
+  for a in "$@"; do list="$list${list:+, }\"$a\""; done
+  printf '\n[mcp_servers.%s]\ncommand = "%s"\nargs = [%s]\n' "$name" "$command" "$list" >> "$config"
+  exit 0
+fi
+if ! has; then echo "No MCP server named $name" >&2; exit 1; fi
+awk -v t="[mcp_servers.$name]" -v sub_="[mcp_servers.$name." '
+  /^\[/ { drop = ($0 == t || index($0, sub_) == 1) }
+  !drop' "$config" > "$config.tmp" && mv "$config.tmp" "$config"
+`
+
 // Fixture is a control plane with one project "demo": a git repo with a tracked .claude/rules
 // file, an untracked settings.local.json and one worktree. Git runs with a private global config
-// whose excludes file ignores plans/; HOME, ACP_ROOT and ACP_AK point into the fixture.
+// whose excludes file ignores plans/; HOME, ACP_ROOT and ACP_AK point into the fixture, and
+// ACP_CLAUDE and ACP_CODEX at the fake agent CLIs.
 type Fixture struct {
-	T                            *testing.T
-	Base, CP, Repo, WT, Home, AK string
+	T                                           *testing.T
+	Base, CP, Repo, WT, Home, AK, Claude, Codex string
 }
 
 func New(t *testing.T) *Fixture {
@@ -69,14 +150,18 @@ func New(t *testing.T) *Fixture {
 		t.Fatal(err)
 	}
 	f := &Fixture{T: t, Base: base, CP: filepath.Join(base, "cp"), Repo: filepath.Join(base, "repo"),
-		WT: filepath.Join(base, "wt"), Home: filepath.Join(base, "home"), AK: filepath.Join(base, "bin/ak")}
+		WT: filepath.Join(base, "wt"), Home: filepath.Join(base, "home"), AK: filepath.Join(base, "bin/ak"),
+		Claude: filepath.Join(base, "bin/claude"), Codex: filepath.Join(base, "bin/codex")}
 	ignore := filepath.Join(base, "global-ignore")
 	f.Write(ignore, "plans/\n")
 	f.Write(filepath.Join(base, "gitconfig"), "[user]\n\tname = t\n\temail = t@t\n[init]\n\tdefaultBranch = main\n"+
 		"[core]\n\texcludesFile = "+ignore+"\n")
 	f.Executable(f.AK, FakeAK)
+	f.Executable(f.Claude, FakeClaude)
+	f.Executable(f.Codex, FakeCodex)
 	for k, v := range map[string]string{"HOME": f.Home, "GIT_CONFIG_GLOBAL": filepath.Join(base, "gitconfig"),
 		"GIT_CONFIG_NOSYSTEM": "1", "XDG_CONFIG_HOME": filepath.Join(base, "xdg"), "ACP_ROOT": f.CP, "ACP_AK": f.AK,
+		"ACP_CLAUDE": f.Claude, "ACP_CODEX": f.Codex,
 		"CLAUDE_CONFIG_DIR": "", "CODEX_HOME": "", "PI_CODING_AGENT_DIR": "", "OMP_HOME": "", "ACP_BIN": ""} {
 		t.Setenv(k, v)
 	}

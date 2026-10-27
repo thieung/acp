@@ -86,3 +86,60 @@ func TestWebRefusesABusyPort(t *testing.T) {
 		t.Fatalf("busy port: %d %q", r.code, r.stderr)
 	}
 }
+
+func TestWebExitsWithParent(t *testing.T) {
+	f := testkit.New(t)
+	cmd := exec.Command(acpBin, "web", "--port", "0", "--no-open", "--print-url", "--exit-with-parent")
+	cmd.Dir = f.Base
+	stdin, _ := cmd.StdinPipe()
+	stdout, _ := cmd.StdoutPipe()
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer cmd.Process.Kill()
+	sc := bufio.NewScanner(stdout)
+	signedIn := false
+	for !signedIn && sc.Scan() {
+		signedIn = strings.HasPrefix(sc.Text(), "sign in: http://127.0.0.1:")
+	}
+	if !signedIn {
+		t.Fatal("acp web printed no sign-in line")
+	}
+	go func() {
+		for sc.Scan() {
+		}
+	}()
+	stdin.Close()
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("acp web did not exit cleanly: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("acp web outlived its parent's stdin")
+	}
+}
+
+func TestWebIgnoresStdinWithoutExitWithParent(t *testing.T) {
+	f := testkit.New(t)
+	cmd := exec.Command(acpBin, "web", "--port", "0", "--no-open", "--print-url")
+	cmd.Dir = f.Base
+	cmd.Stdin = strings.NewReader("") // EOF at once
+	stdout, _ := cmd.StdoutPipe()
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer cmd.Process.Kill()
+	sc := bufio.NewScanner(stdout)
+	for sc.Scan() && !strings.HasPrefix(sc.Text(), "sign in:") {
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		t.Fatalf("acp web exited on stdin EOF without --exit-with-parent: %v", err)
+	case <-time.After(time.Second):
+	}
+}

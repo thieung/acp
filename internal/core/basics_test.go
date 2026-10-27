@@ -55,6 +55,18 @@ func TestRedactValueWalksDecodedJSON(t *testing.T) {
 	}
 }
 
+func TestRedactAgentKitKeys(t *testing.T) {
+	for _, key := range []string{"ak_live_FAKEKEY0000000000", "ak_test_FAKE-KEY_000", "ak_license_FAKEKEY0000000000"} {
+		in := "ak said: invalid key " + key + " (try again)"
+		if got := Redact(in); strings.Contains(got, key) || !strings.Contains(got, redacted) {
+			t.Errorf("Redact(%q) = %q", in, got)
+		}
+	}
+	if got := Redact("ak_kit_engineer and ak_live_short"); got != "ak_kit_engineer and ak_live_short" {
+		t.Errorf("non-keys changed: %q", got)
+	}
+}
+
 func TestValidNameAndSafeJoin(t *testing.T) {
 	for _, ok := range []string{"demo", "a.b-c_1", "ak-cook"} {
 		if !ValidName(ok) {
@@ -165,6 +177,22 @@ func TestExecReportsExitAndOutput(t *testing.T) {
 	}
 }
 
+func TestSelfRunnerPassesStdin(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "cat-stdin")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\ncat\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := SelfRunner(bin, dir)
+	out, err := run(context.Background(), []byte("ak_live_FAKEKEY0000000000"), "setup")
+	if err != nil || string(out) != "ak_live_FAKEKEY0000000000" {
+		t.Fatalf("stdin: %q %v", out, err)
+	}
+	if out, err := run(context.Background(), nil, "setup"); err != nil || len(out) != 0 {
+		t.Fatalf("nil stdin must give the child no input: %q %v", out, err)
+	}
+}
+
 func TestResolveRoot(t *testing.T) {
 	base := t.TempDir()
 	home := filepath.Join(base, "home")
@@ -208,5 +236,15 @@ func TestResolveRoot(t *testing.T) {
 	os.RemoveAll(def)
 	if _, err := ResolveRoot(base); err == nil || !strings.Contains(err.Error(), "ACP_ROOT") {
 		t.Fatalf("no root: %v", err)
+	}
+}
+
+func TestExecDeadlineFromContextReadsWell(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	res := Exec(ctx, ExecOpts{}, "sleep", "5")
+	if !res.TimedOut || res.Err == nil || strings.Contains(res.Err.Error(), "after 0s") ||
+		!strings.Contains(res.Err.Error(), "timed out") {
+		t.Fatalf("a deadline set by the caller: %+v", res)
 	}
 }

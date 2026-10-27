@@ -10,8 +10,7 @@ import (
 )
 
 // hookBinary is the acp path the hook runs: ACP_BIN, else ~/.local/bin/acp when it is this binary,
-// else this binary. A binary in a temporary folder or the Go build cache is refused, since the hook
-// would break once it is cleaned up.
+// else this binary, refused when lastingBinary is.
 func hookBinary() (string, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -31,11 +30,40 @@ func hookBinary() (string, error) {
 	if fi, err := os.Stat(real); err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm()&0o111 == 0 {
 		return "", fail("%s is not an executable file", path)
 	}
-	temp := []string{os.TempDir(), resolve(os.TempDir())}
-	if core.WithinAny(real, temp) || core.WithinAny(path, temp) || strings.Contains(real, "/go-build") {
-		return "", fail("%s is a temporary build; install acp (`curl -fsSL .../install.sh | sh`) or set ACP_BIN to a lasting path", path)
+	if err := lastingBinary(path); err != nil {
+		return "", err
 	}
 	return path, nil
+}
+
+// lastingBinary refuses an acp path that will vanish, checked as given and resolved: a temporary
+// folder or the Go build cache, a mounted disk image or volume, or the copy macOS runs a quarantined
+// app from (App Translocation). Hooks, links and MCP entries wired to it would break once it is gone.
+func lastingBinary(path string) error {
+	temp := []string{os.TempDir(), resolve(os.TempDir())}
+	why := func(p string) string {
+		switch {
+		case strings.HasPrefix(p, "/Volumes/"):
+			return "on a disk image or a removable volume"
+		case strings.Contains(p, "/AppTranslocation/"):
+			return "a copy macOS runs from a temporary folder"
+		case core.WithinAny(p, temp) || strings.Contains(p, "/go-build"):
+			return "a temporary build"
+		}
+		return ""
+	}
+	real := resolve(path)
+	reason := why(path)
+	if reason == "" {
+		reason = why(real)
+	}
+	switch {
+	case reason == "":
+		return nil
+	case strings.Contains(path, ".app/Contents/") || strings.Contains(real, ".app/Contents/"):
+		return fail("%s is %s; move acp.app to Applications and open it from there", path, reason)
+	}
+	return fail("%s is %s; install acp (`curl -fsSL .../install.sh | sh`) or set ACP_BIN to a lasting path", path, reason)
 }
 
 // hooksShape reports whether "hooks" is an object and its SessionStart a list (or missing), so a

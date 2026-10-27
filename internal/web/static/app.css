@@ -185,13 +185,18 @@ pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
 .notice.ok { background: var(--ok-soft); color: var(--ok); }
 details summary { cursor: pointer; color: var(--muted); }
 details pre { margin-top: 8px; padding: 10px; background: var(--surface-2); border-radius: var(--radius-sm); max-height: 320px; overflow: auto; }
-input[type="text"] { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+input[type="text"], input[type="password"] { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.login { display: grid; gap: 8px; }
+.login .row { flex-wrap: nowrap; }
+.login input { flex: 1; min-width: 0; font-family: var(--font-code); font-size: 13px; }
+.login a { color: var(--accent); justify-self: start; }
 .checks { display: grid; gap: 4px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .checks label { display: flex; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 6px; overflow-wrap: anywhere; }
 .checks label.changed { background: var(--accent-soft); }
 .checks input { accent-color: var(--accent); }
 
-.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 90; background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: var(--radius-sm); box-shadow: var(--shadow); }
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 90; background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: var(--radius-sm); box-shadow: var(--shadow); display: flex; gap: 12px; align-items: center; }
+.toast .btn { color: var(--text); padding: 4px 10px; white-space: nowrap; }
 .signin { max-width: 520px; margin: 12vh auto; }
 
 @media (max-width: 720px) {

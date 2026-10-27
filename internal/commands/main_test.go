@@ -45,7 +45,13 @@ func acp(t *testing.T, f *testkit.Fixture, stdin string, args ...string) result 
 
 func acpIn(t *testing.T, dir, stdin string, args ...string) result {
 	t.Helper()
-	cmd := exec.Command(acpBin, args...)
+	return runBin(t, acpBin, dir, stdin, args...)
+}
+
+// runBin runs one acp binary from dir with stdin.
+func runBin(t *testing.T, bin, dir, stdin string, args ...string) result {
+	t.Helper()
+	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
 	cmd.Stdin = bytes.NewBufferString(stdin)
 	var out, errw bytes.Buffer
@@ -126,4 +132,15 @@ func installableBinary(t *testing.T, f *testkit.Fixture, dir string) string {
 	os.Chmod(path, 0o755)
 	t.Setenv("ACP_BIN", path)
 	return path
+}
+
+// installedAcp is installableBinary plus a runner for that copy, for commands that wire the path of
+// the acp running them (link-cli): acpBin itself lives in a temporary folder they refuse.
+func installedAcp(t *testing.T, f *testkit.Fixture, dir string) (string, func(stdin string, args ...string) result) {
+	t.Helper()
+	bin := installableBinary(t, f, dir)
+	return bin, func(stdin string, args ...string) result {
+		t.Helper()
+		return runBin(t, bin, f.Base, stdin, args...)
+	}
 }

@@ -100,6 +100,7 @@ if [ -L "$dest" ]; then
   old=$(readlink "$dest")
   case $old in
     */scripts/acp) say "replacing the link to the Python acp ($old)" ;;
+    */acp.app/Contents/Helpers/acp) die "acp is managed by acp.app; update it from the app (or remove the link to install the CLI separately)" ;;
     *) die "$dest is a link to $old, not acp; move it away and run again" ;;
   esac
 elif [ -e "$dest" ]; then

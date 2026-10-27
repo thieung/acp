@@ -652,17 +652,21 @@ func commandExists(cmd string) bool {
 
 // ----------------------------------------------------------------- mcp
 
-// mcpChecks reports stdio MCP servers whose command is missing. Only the server name and command
-// path are read into a finding; env, headers and args never are.
-// mcpServer is one MCP server from a Claude Code or Codex config. Only its name and command leave
-// acp; args, env, headers and urls can hold secrets.
-type mcpServer struct {
+// MCPServer is one MCP server from a Claude Code or Codex config. Only its name and command leave
+// acp; args, env, headers and urls can hold secrets. Args are read only so `acp connect` can tell
+// whether its own entry is current; they never reach a finding, an envelope or a log.
+type MCPServer struct {
 	Source, File, Name, Command string
+	Agent                       string // "claude" or "codex"
+	Scope                       string // "user" (every project) or "project"
+	Args                        []string
 	Remote                      bool
 }
 
+// mcpChecks reports stdio MCP servers whose command is missing. Only the server name and command
+// path are read into a finding; env, headers and args never are.
 func mcpChecks(ctx context.Context, c *collector) {
-	for _, s := range mcpServers() {
+	for _, s := range MCPServers() {
 		if !s.Remote && s.Command != "" && !commandExists(s.Command) {
 			c.add("mcp_command_missing", Warn, "hooks", s.Source+": "+s.Name,
 				map[string]string{"source": s.Source, "server": s.Name, "command": s.Command, "file": s.File}, "", nil)
@@ -670,18 +674,19 @@ func mcpChecks(ctx context.Context, c *collector) {
 	}
 }
 
-// mcpServers lists the servers of ~/.claude.json (user and per project) and Codex's config.toml.
-func mcpServers() []mcpServer {
-	var out []mcpServer
+// MCPServers lists the servers of ~/.claude.json (user and per project) and Codex's config.toml.
+func MCPServers() []MCPServer {
+	var out []MCPServer
 	claude := filepath.Join(core.HomeDir(), ".claude.json")
 	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
 		claude = filepath.Join(dir, ".claude.json")
 	}
 	if data, ok := readSettings(claude); ok {
-		out = append(out, claudeServers(claude, "~/.claude.json", data.Object("mcpServers"))...)
+		out = append(out, claudeServers(claude, "~/.claude.json", "user", data.Object("mcpServers"))...)
 		projects := data.Object("projects")
 		for _, k := range projects.Keys() {
-			out = append(out, claudeServers(claude, "~/.claude.json project "+k, projects.Object(k).Object("mcpServers"))...)
+			out = append(out, claudeServers(claude, "~/.claude.json project "+k, "project",
+				projects.Object(k).Object("mcpServers"))...)
 		}
 	}
 	codexHome := os.Getenv("CODEX_HOME")
@@ -691,25 +696,29 @@ func mcpServers() []mcpServer {
 	return append(out, codexServers(filepath.Join(codexHome, "config.toml"))...)
 }
 
-func claudeServers(file, source string, servers *core.Object) []mcpServer {
-	var out []mcpServer
+func claudeServers(file, source, scope string, servers *core.Object) []MCPServer {
+	var out []MCPServer
 	for _, name := range servers.Keys() {
 		s := servers.Object(name)
 		if s == nil {
 			continue
 		}
 		remote := s.Has("url") || (s.String("type") != "" && s.String("type") != "stdio")
-		srv := mcpServer{Source: source, File: file, Name: name, Remote: remote}
+		srv := MCPServer{Source: source, File: file, Name: name, Agent: "claude", Scope: scope, Remote: remote}
 		if !remote {
 			srv.Command = s.String("command")
+			for _, a := range s.Array("args") {
+				srv.Args = append(srv.Args, fmt.Sprint(a))
+			}
 		}
 		out = append(out, srv)
 	}
 	return out
 }
 
-// codexServers reads [mcp_servers.NAME] sections of a Codex config.toml line by line.
-func codexServers(path string) []mcpServer {
+// codexServers reads [mcp_servers.NAME] sections of a Codex config.toml line by line. Codex has
+// no project scope for MCP servers, so every one is a user-scope server.
+func codexServers(path string) []MCPServer {
 	fi, err := os.Lstat(path)
 	if err != nil || !fi.Mode().IsRegular() || fi.Size() > 4<<20 {
 		return nil
@@ -719,7 +728,10 @@ func codexServers(path string) []mcpServer {
 		return nil
 	}
 	defer f.Close()
-	type server struct{ command, url string }
+	type server struct {
+		command, url string
+		args         []string
+	}
 	servers := map[string]*server{}
 	var order []string
 	var cur *server
@@ -765,14 +777,23 @@ func codexServers(path string) []mcpServer {
 			cur.command = tomlString(value)
 		case "url":
 			cur.url = tomlString(value)
+		case "args":
+			// An array may run over several lines.
+			args, done := tomlStrings(value)
+			for !done && sc.Scan() {
+				value += "\n" + sc.Text()
+				args, done = tomlStrings(value)
+			}
+			cur.args = args
 		}
 	}
-	var out []mcpServer
+	var out []MCPServer
 	for _, name := range order {
 		s := servers[name]
-		srv := mcpServer{Source: "~/.codex/config.toml", File: path, Name: name, Remote: s.url != ""}
+		srv := MCPServer{Source: "~/.codex/config.toml", File: path, Name: name, Agent: "codex", Scope: "user",
+			Remote: s.url != ""}
 		if !srv.Remote {
-			srv.Command = s.command
+			srv.Command, srv.Args = s.command, s.args
 		}
 		out = append(out, srv)
 	}
@@ -787,6 +808,37 @@ func tomlString(v string) string {
 		}
 	}
 	return ""
+}
+
+// tomlStrings reads a TOML array of strings; done is false until its closing bracket. Basic strings
+// keep only the \" and \\ escapes, which is all a path or a flag needs.
+func tomlStrings(v string) (out []string, done bool) {
+	v = strings.TrimSpace(v)
+	if !strings.HasPrefix(v, "[") {
+		return nil, true
+	}
+	for i := 1; i < len(v); i++ {
+		switch c := v[i]; c {
+		case ']':
+			return out, true
+		case '#':
+			for i < len(v) && v[i] != '\n' {
+				i++
+			}
+		case '"', '\'':
+			var b strings.Builder
+			j := i + 1
+			for ; j < len(v) && v[j] != c; j++ {
+				if c == '"' && v[j] == '\\' && j+1 < len(v) {
+					j++
+				}
+				b.WriteByte(v[j])
+			}
+			out = append(out, b.String())
+			i = j
+		}
+	}
+	return out, false
 }
 
 // ----------------------------------------------------------------- skills

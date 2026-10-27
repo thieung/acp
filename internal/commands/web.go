@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -17,8 +18,10 @@ import (
 	"github.com/thieung/acp/internal/web"
 )
 
-// cmdWeb serves the dashboard on 127.0.0.1 until SIGINT or SIGTERM. The sign-in URL carries a
-// one-time code; it is printed only to a terminal or with --print-url.
+// cmdWeb serves the dashboard on 127.0.0.1 until SIGINT or SIGTERM, or with --exit-with-parent until
+// stdin closes: an app that runs acp web holds the other end, so acp stops when the app quits or
+// crashes. The sign-in URL carries a one-time code; it is printed only to a terminal or with
+// --print-url. On the way out it waits (up to ACP_AK_TIMEOUT) for a change already running.
 func cmdWeb(e *Env, a *Args) (int, error) {
 	root, err := e.Root()
 	if err != nil {
@@ -50,6 +53,15 @@ func cmdWeb(e *Env, a *Args) (int, error) {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if a.Bool("exit-with-parent") {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		defer cancel()
+		go func() {
+			io.Copy(io.Discard, e.Stdin)
+			cancel()
+		}()
+	}
 	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	served := make(chan error, 1)
 	go func() { served <- hs.Serve(ln) }()
@@ -58,9 +70,18 @@ func cmdWeb(e *Env, a *Args) (int, error) {
 		return 0, fail("acp web: %v", err)
 	case <-ctx.Done():
 	}
+	stop() // a second Ctrl-C stops acp at once
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	hs.Shutdown(shutdown)
+	if srv.Running() {
+		fmt.Fprintf(e.Errw, "acp web: waiting for a running change to finish\n")
+	}
+	wait, cancelWait := context.WithTimeout(context.Background(), core.AKTimeout())
+	defer cancelWait()
+	if err := srv.Wait(wait); err != nil {
+		return 0, fail("acp web: stopped while a change was still running")
+	}
 	return 0, nil
 }
 

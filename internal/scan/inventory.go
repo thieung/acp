@@ -31,7 +31,7 @@ func Inventory() *core.Object {
 			"hooks", hooks))
 	}
 	servers := []any{}
-	for _, s := range mcpServers() {
+	for _, s := range MCPServers() {
 		servers = append(servers, core.Obj("source", s.Source, "name", s.Name, "command", core.Redact(s.Command),
 			"remote", s.Remote))
 	}
