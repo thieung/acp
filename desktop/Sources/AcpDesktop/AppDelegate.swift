@@ -73,6 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
             }
+            // acp web may wait for a scan or preview to end; the windows go now so quitting feels done.
+            NSApp.windows.forEach { $0.orderOut(nil) }
             process.stop(timeout: 10) {
                 self.quitting = true
                 NSApp.reply(toApplicationShouldTerminate: true)

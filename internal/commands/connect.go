@@ -111,9 +111,9 @@ func cmdConnect(e *Env, a *Args) (int, error) {
 		case "ok":
 			log.Ok("%s: acp mcp is registered", c.name)
 		case "missing":
-			log.Change("+ %s: register acp mcp", c.name)
+			log.Change("+ %s: register acp mcp as %s mcp", c.name, bin)
 		case "stale":
-			log.Change("~ %s: replace stale acp (%s)", c.name, old)
+			log.Change("~ %s: replace stale acp (%s) with %s mcp", c.name, old, bin)
 		}
 		if apply && state != "ok" {
 			msg := ""
