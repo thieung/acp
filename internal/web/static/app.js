@@ -60,6 +60,7 @@
     decide: { label: 'Bạn quyết định', rank: 2 },
     info: { label: 'Để ý', rank: 3 },
   };
+  // A fix may carry its own note, saying what it really changes.
   const SAFETY = {
     safe: { label: 'An toàn', cls: 'ok', note: 'Chỉ thêm hoặc sửa liên kết acp tạo ra; chạy lại bao nhiêu lần cũng được.' },
     backup: { label: 'Có bản sao lưu', cls: 'accent', note: 'acp chép lại tệp cũ vào runtime/backups trước khi đổi.' },
@@ -336,7 +337,7 @@
       const lines = previewLines(op.envelope);
       const d = dataOf(op.envelope);
       const parts = [
-        h('div', { class: 'row' }, tag(s.cls, s.label), h('span', { class: 'muted', text: s.note })),
+        h('div', { class: 'row' }, tag(s.cls, s.label), h('span', { class: 'muted', text: fix.note || s.note })),
       ];
       if (op.envelope && op.envelope.error) {
         parts.push(h('div', { class: 'notice error', text: 'Không xem trước được: ' + op.envelope.error + '. Chưa thể áp dụng.' }));
@@ -653,13 +654,13 @@
         cli.current ? tag('ok', 'Dùng bản này') : cli.target ? tag('warn', 'Trỏ tới acp khác') : tag('info', 'Chưa có')),
       h('p', { class: 'muted', text: 'Gõ acp trong Terminal sẽ chạy đúng bản acp của ứng dụng này, để mọi nơi dùng chung một acp.' }),
       tech(h('p', { class: 'cmd muted', text: (cli.path || '~/.local/bin/acp') + (cli.target ? ' → ' + cli.target : '') })),
-      cli.current ? null : h('div', { class: 'row' }, btn('Dùng acp này trong Terminal', () => openFix('Dùng acp này trong Terminal', { preview: 'setup.link-cli.preview', apply: 'setup.link-cli', args: {} }, 'confirm'))));
+      cli.current ? null : h('div', { class: 'row' }, btn('Dùng acp này trong Terminal', () => openFix('Dùng acp này trong Terminal', { preview: 'setup.link-cli.preview', apply: 'setup.link-cli', args: {}, note: 'Lệnh acp trong Terminal sẽ chạy bản trong ứng dụng này. Đọc kỹ rồi mới áp dụng.' }, 'confirm'))));
     // Only macOS reports the Command Line Tools; git needs them.
     const clt = d.clt;
     const cltCard = clt ? h('article', { class: 'card' },
       h('div', { class: 'row' }, h('h3', { text: 'Command Line Tools của Apple' }), clt.installed ? tag('ok', 'Đã cài') : tag('warn', 'Chưa cài')),
       h('p', { class: 'muted', text: 'acp cần git, và git trên Mac đi kèm bộ công cụ này của Apple.' }),
-      clt.installed ? null : h('div', { class: 'row' }, btn('Cài Command Line Tools', () => openFix('Cài Command Line Tools của Apple', { preview: 'setup.install-clt.preview', apply: 'setup.install-clt', args: {} }, 'confirm'), 'primary'))) : null;
+      clt.installed ? null : h('div', { class: 'row' }, btn('Cài Command Line Tools', () => openFix('Cài Command Line Tools của Apple', { preview: 'setup.install-clt.preview', apply: 'setup.install-clt', args: {}, note: 'Mở hộp thoại của Apple để tải và cài Command Line Tools. Đọc kỹ rồi mới áp dụng.' }, 'confirm'), 'primary'))) : null;
     const homes = toArray(state.hooks && state.hooks.homes);
     const homeCard = h('article', { class: 'card' },
       h('h3', { text: 'Trợ lý AI trên máy' }),
@@ -734,7 +735,7 @@
           tech(ag.cli ? h('span', { class: 'cmd muted', text: ag.cli }) : null));
       })) : null,
       agents.some((ag) => ag.state === 'missing' || ag.state === 'stale')
-        ? h('div', { class: 'row' }, btn('Kết nối', () => openFix('Kết nối trợ lý AI với acp', { preview: 'connect.preview', apply: 'connect.apply', args: {} }, 'confirm'), 'primary'))
+        ? h('div', { class: 'row' }, btn('Kết nối', () => openFix('Kết nối trợ lý AI với acp', { preview: 'connect.preview', apply: 'connect.apply', args: {}, note: 'Claude Code và Codex sẽ có thêm máy chủ MCP acp, chỉ đọc. Đọc kỹ rồi mới áp dụng.' }, 'confirm'), 'primary'))
         : null);
     const g = previewLines(state.global);
     const globalCard = h('article', { class: 'card' },

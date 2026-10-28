@@ -60,7 +60,7 @@ func TestConnectRegistersAcpMCPWithEachAgent(t *testing.T) {
 	f := testkit.New(t)
 	bin := installableBinary(t, f, filepath.Join(f.Base, "app"))
 	c := connect(t, f)
-	if c.code != 0 || strings.Join(c.changes, "\n") != "+ claude: register acp mcp\n+ codex: register acp mcp" {
+	if c.code != 0 || strings.Join(c.changes, "\n") != "+ claude: register acp mcp as "+bin+" mcp\n+ codex: register acp mcp as "+bin+" mcp" {
 		t.Fatalf("preview: %d %q\n%s%s", c.code, c.changes, c.stdout, c.stderr)
 	}
 	if c.states["claude"] != "missing" || c.states["codex"] != "missing" || c.clis["claude"] != f.Claude {
@@ -103,7 +103,7 @@ func TestConnectReplacesAStaleEntry(t *testing.T) {
 	// The right binary with other arguments is stale too.
 	f.Write(filepath.Join(f.Home, ".codex/config.toml"), "[mcp_servers.acp]\ncommand = \""+bin+"\"\nargs = [\"mcp\", \"--x\"]\n")
 	c := connect(t, f)
-	if c.code != 0 || strings.Join(c.changes, "\n") != "~ claude: replace stale acp (/old/acp)\n~ codex: replace stale acp ("+bin+")" ||
+	if c.code != 0 || strings.Join(c.changes, "\n") != "~ claude: replace stale acp (/old/acp) with "+bin+" mcp\n~ codex: replace stale acp ("+bin+") with "+bin+" mcp" ||
 		c.states["claude"] != "stale" || c.states["codex"] != "stale" {
 		t.Fatalf("preview: %d %q %v", c.code, c.changes, c.states)
 	}
