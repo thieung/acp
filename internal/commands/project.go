@@ -53,7 +53,7 @@ func cmdAdd(e *Env, a *Args) (int, error) {
 	}
 	id := a.Str("id")
 	if id == "" {
-		id = strings.Trim(nonID.ReplaceAllString(strings.ToLower(filepath.Base(main)), "-"), "-")
+		id = defaultID(main)
 	}
 	if !core.ValidName(id) {
 		return 0, fail("invalid project id %q (lowercase letters, digits, '.', '_' and '-')", id)
@@ -83,6 +83,18 @@ func cmdAdd(e *Env, a *Args) (int, error) {
 		e.Printf("%s\n", e.Paint("2", "dry run: nothing was written"))
 		return 0, nil
 	}
+	return registerProject(e, root, main, id, manifest, a.Bool("no-sync"))
+}
+
+// defaultID is a project id from a folder name.
+func defaultID(main string) string {
+	return strings.Trim(nonID.ReplaceAllString(strings.ToLower(filepath.Base(main)), "-"), "-")
+}
+
+// registerProject writes the manifest and the overlay entry under the root lock, then syncs the
+// project unless noSync. It returns 1 when the sync left issues.
+func registerProject(e *Env, root *core.Root, main, id string, manifest *core.Object, noSync bool) (int, error) {
+	file, _ := core.SafeJoin(root.Projects(), id+".json")
 	lock, err := lockRoot(e, root)
 	if err != nil {
 		return 0, err
@@ -103,7 +115,7 @@ func cmdAdd(e *Env, a *Args) (int, error) {
 		return 0, err
 	}
 	e.Printf("added %s -> %s  (edit projects/%s.json for personal skills)\n", id, main, id)
-	if a.Bool("no-sync") {
+	if noSync {
 		return 0, nil
 	}
 	p, err := root.ByID(id)
@@ -177,6 +189,9 @@ func cmdRemove(e *Env, a *Args) (int, error) {
 			if err := unlinkRepo(e, root, repo, dry, &removed); err != nil {
 				return 0, err
 			}
+			if err := dropNewExclude(e, root, repo, dry); err != nil {
+				return 0, err
+			}
 		}
 	}
 	if core.Exists(manifest) {
@@ -226,6 +241,32 @@ func unlinkRepo(e *Env, root *core.Root, repo string, dry bool, removed *[]strin
 		}
 	}
 	return nil
+}
+
+// dropNewExclude takes out the info/exclude block `acp new` wrote when it git-inited the repo. An
+// unreadable record is reported and removed with the block.
+func dropNewExclude(e *Env, root *core.Root, repo string, dry bool) error {
+	gitDir, err := core.GitDir(repo)
+	if err != nil {
+		return nil
+	}
+	if rec, err := core.ReadNewRecord(gitDir); err != nil {
+		e.Printf("%s %v; removing it and the acp new block anyway\n", e.Paint("33", "!"), err)
+	} else if rec == nil {
+		return nil
+	}
+	if core.HasNewRepoExclude(gitDir) {
+		e.Printf("- %s: the block acp new wrote\n", filepath.Join(gitDir, "info", "exclude"))
+	}
+	if dry {
+		return nil
+	}
+	lock, err := lockRepo(e, root, repo, linkLockWait)
+	if err != nil {
+		return fail("%s is busy syncing; try again later", repo)
+	}
+	defer lock.Release()
+	return core.RemoveNewRepoExclude(gitDir)
 }
 
 func resolve(p string) string {

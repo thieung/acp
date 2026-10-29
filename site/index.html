@@ -495,6 +495,8 @@ my-app  /Users/you/code/my-app  in sync</pre></div>
   "agentkit": { "kit": "engineer", "channel": "beta", "targets": ["claude-code", "codex"], "skills": "all" },
   "skills": []
 }</code></pre><button type="button" class="copy"></button></div></div>
+            <p lang="en">Starting from scratch? <code class="w">acp new ~/code/my-app</code> creates the folder (or runs <code>git init</code> in an existing one, or takes an existing repo), adds it and installs AgentKit for Claude Code only. Pick runtimes with <code>--runtimes claude,codex</code> and personal skills with <code>--skills</code>; defaults can live in <code>project-defaults.json</code>. No commit is made, and what acp and AgentKit created is listed in <code>.git/info/exclude</code> so a first <code>git add -A</code> leaves it out.</p>
+            <p lang="vi">Bắt đầu từ con số không? <code class="w">acp new ~/code/my-app</code> tạo thư mục (hoặc chạy <code>git init</code> trong thư mục có sẵn, hoặc nhận repo có sẵn), thêm vào fleet và cài AgentKit chỉ cho Claude Code. Chọn runtime bằng <code>--runtimes claude,codex</code> và skill cá nhân bằng <code>--skills</code>; giá trị mặc định có thể đặt trong <code>project-defaults.json</code>. acp không commit, và những gì acp cùng AgentKit tạo ra được ghi vào <code>.git/info/exclude</code> để lần <code>git add -A</code> đầu tiên bỏ qua chúng.</p>
           </section>
 
           <section class="station" id="sync">
@@ -644,6 +646,7 @@ acp remove my-app</code></pre><button type="button" class="copy"></button></div>
             <tbody>
               <tr><td><code>acp</code>, <code class="w">acp doctor</code></td><td lang="en">Status of every project; doctor exits 1 on drift</td><td lang="vi">Tình trạng mọi project; doctor trả mã 1 khi lệch</td><td>–</td></tr>
               <tr><td><code class="w">acp init [--root DIR]</code></td><td lang="en">Create or adopt a control plane</td><td lang="vi">Tạo hoặc nhận control plane</td><td><code>--dry-run</code></td></tr>
+              <tr><td><code class="w">acp new PATH</code></td><td lang="en">Create or git init a project, add it and install AgentKit</td><td lang="vi">Tạo hoặc git init một project, thêm vào fleet và cài AgentKit</td><td><code>--dry-run</code></td></tr>
               <tr><td><code class="w">acp add PATH</code></td><td lang="en">Add a repo and sync it</td><td lang="vi">Thêm repo và sync</td><td><code>--dry-run</code></td></tr>
               <tr><td><code class="w">acp remove ID</code></td><td lang="en">Take a repo out and drop acp's links</td><td lang="vi">Gỡ repo và bỏ các link của acp</td><td lang="en">default; <code>--yes</code> runs it</td><td lang="vi">mặc định; <code>--yes</code> để chạy</td></tr>
               <tr><td><code class="w">acp sync [ID…] [--all]</code></td><td lang="en">AgentKit, personal links, worktree links</td><td lang="vi">AgentKit, link cá nhân, link worktree</td><td><code>--dry-run</code></td></tr>

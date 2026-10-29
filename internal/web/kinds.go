@@ -20,13 +20,16 @@ type args struct {
 	// Channel and Kit scope an upgrade; empty means acp's defaults.
 	Channel string `json:"channel,omitempty"`
 	Kit     string `json:"kit,omitempty"`
+	// Runtimes and Skills shape a new project; empty means project-defaults.json's or acp's.
+	Runtimes []string `json:"runtimes,omitempty"`
+	Skills   []string `json:"skills,omitempty"`
 }
 
 // kind is one action the dashboard may run. A mutation names the read-only kind that previews it.
 type kind struct {
 	mutation bool
 	preview  string
-	needs    string // "id", "id-or-all", "skills", "fleet-path", "repo-path", "upgrade" or ""
+	needs    string // "id", "id-or-all", "skills", "fleet-path", "repo-path", "new-path", "upgrade" or ""
 	argv     func(a args) []string
 }
 
@@ -63,6 +66,22 @@ func skillsArgv(extra ...string) func(args) []string {
 		}
 		if len(a.Remove) > 0 {
 			argv = append(argv, "--remove", strings.Join(a.Remove, ","))
+		}
+		return append(argv, extra...)
+	}
+}
+
+func newArgv(extra ...string) func(args) []string {
+	return func(a args) []string {
+		argv := []string{"new", a.Path}
+		if a.ID != "" {
+			argv = append(argv, "--id", a.ID)
+		}
+		if len(a.Runtimes) > 0 {
+			argv = append(argv, "--runtimes", strings.Join(a.Runtimes, ","))
+		}
+		if len(a.Skills) > 0 {
+			argv = append(argv, "--skills", strings.Join(a.Skills, ","))
 		}
 		return append(argv, extra...)
 	}
@@ -113,6 +132,10 @@ var kinds = map[string]kind{
 
 	"add.preview": {needs: "repo-path", argv: func(a args) []string { return []string{"add", a.Path, "--dry-run"} }},
 	"add":         {mutation: true, preview: "add.preview", needs: "repo-path", argv: func(a args) []string { return []string{"add", a.Path} }},
+
+	// new creates folders, so its path goes through the CLI's own rules and must also be inside HOME.
+	"new.preview": {needs: "new-path", argv: newArgv("--dry-run")},
+	"new":         {mutation: true, preview: "new.preview", needs: "new-path", argv: newArgv()},
 }
 
 // check validates the args a kind uses, so nothing reaches acp as a flag or an unexpected path.
@@ -148,6 +171,31 @@ func (k kind) check(root *core.Root, a args) error {
 	case "fleet-path":
 		if !inFleet(root, a.Path) {
 			return errors.New("not a checkout or worktree of a fleet project")
+		}
+	case "new-path":
+		if !filepath.IsAbs(a.Path) || filepath.Clean(a.Path) != a.Path {
+			return errors.New("path must be absolute")
+		}
+		np, err := core.PlanNewPath(root, a.Path)
+		if err != nil {
+			return err
+		}
+		home, err := filepath.EvalSymlinks(core.HomeDir())
+		if err != nil || !core.Within(np.Real, home) || !core.Within(np.Main, home) {
+			return errors.New("the dashboard only creates or adds projects inside your home folder")
+		}
+		if a.ID != "" && !core.ValidName(a.ID) {
+			return errors.New("invalid project id")
+		}
+		for _, r := range a.Runtimes {
+			if _, ok := core.TargetOf(r); !ok {
+				return errors.New("unknown runtime")
+			}
+		}
+		for _, n := range a.Skills {
+			if !core.ValidName(n) {
+				return errors.New("invalid skill name")
+			}
 		}
 	case "repo-path":
 		if !filepath.IsAbs(a.Path) || filepath.Clean(a.Path) != a.Path {

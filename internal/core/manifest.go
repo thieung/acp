@@ -19,6 +19,16 @@ var Targets = map[string]string{"claude-code": "claude", "codex": "codex"}
 // TargetNames is Targets' keys in Python's order.
 var TargetNames = []string{"claude-code", "codex"}
 
+// TargetOf is the AgentKit target that installs into a runtime.
+func TargetOf(runtime string) (string, bool) {
+	for _, t := range TargetNames {
+		if Targets[t] == runtime {
+			return t, true
+		}
+	}
+	return "", false
+}
+
 // Project is one manifest plus the repo path from the machine overlay ("" when not on this machine).
 type Project struct {
 	ID       string

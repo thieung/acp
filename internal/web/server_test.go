@@ -879,3 +879,99 @@ func TestLoginEndpointDecodesTheKey(t *testing.T) {
 		}
 	}
 }
+
+func TestNewRejectsBadArgs(t *testing.T) {
+	f := testkit.New(t)
+	cp := filepath.Join(f.Home, "agent-control-plane")
+	os.MkdirAll(filepath.Join(cp, "skills"), 0o755)
+	outside := filepath.Join(f.Base, "elsewhere")
+	os.MkdirAll(outside, 0o755)
+	os.Symlink(outside, filepath.Join(f.Home, "away"))
+	c := start(t, f, nil)
+	c.signIn()
+	foo := filepath.Join(f.Home, "foo")
+	for _, a := range []map[string]any{
+		{"path": "relative/foo"},
+		{"path": f.Home + "/x/../foo"},
+		{"path": filepath.Join(f.Home, "missing", "foo")},
+		{"path": filepath.Join(f.Base, "foo")},
+		{"path": filepath.Join(f.Home, "away")},
+		{"path": filepath.Join(f.CP, "skills", "foo")},
+		{"path": foo, "id": "../x"},
+		{"path": foo, "runtimes": []string{"grok"}},
+		{"path": foo, "runtimes": []string{""}},
+		{"path": foo, "skills": []string{"--apply"}},
+	} {
+		if code, out, _ := c.do("POST", "/api/run", map[string]any{"kind": "new.preview", "args": a}, nil); code != http.StatusBadRequest {
+			t.Errorf("%v: %d %s", a, code, out)
+		}
+	}
+	// A worktree inside HOME of a repo outside it would register the outside repo.
+	far := filepath.Join(f.Base, "far")
+	f.Write(filepath.Join(far, "README.md"), "far")
+	f.Git(far, "init", "-q")
+	f.Git(far, "add", ".")
+	f.Git(far, "commit", "-qm", "init")
+	f.Git(far, "worktree", "add", "-q", "-b", "side", filepath.Join(f.Home, "far-wt"))
+	if err := kinds["new.preview"].check(&core.Root{Dir: f.CP}, args{Path: filepath.Join(f.Home, "far-wt")}); err == nil ||
+		!strings.Contains(err.Error(), "inside your home folder") {
+		t.Errorf("worktree of a repo outside HOME: %v", err)
+	}
+	// A control plane inside HOME is refused by its own rule, not only by HOME's.
+	s := New(&core.Root{Dir: cp}, core.SelfRunner(acpBin, f.Base))
+	if err := kinds["new.preview"].check(s.root, args{Path: filepath.Join(cp, "skills", "x")}); err == nil ||
+		!strings.Contains(err.Error(), "control plane") {
+		t.Errorf("control plane inside HOME: %v", err)
+	}
+}
+
+func TestNewPreviewThenApply(t *testing.T) {
+	f := testkit.New(t)
+	c := start(t, f, nil)
+	c.signIn()
+	foo := filepath.Join(f.Home, "foo")
+	args := map[string]any{"path": foo, "runtimes": []string{"claude"}}
+	code, prev := c.run("new.preview", args, "")
+	if code != http.StatusAccepted || prev.Envelope["kind"] != "acp.new" || prev.Digest == "" {
+		t.Fatalf("preview: %d %+v", code, prev)
+	}
+	logs, _ := prev.Envelope["data"].(map[string]any)["logs"].([]any)
+	if len(logs) == 0 || len(logs[0].(map[string]any)["changes"].([]any)) == 0 {
+		t.Fatalf("preview shows no changes: %+v", prev.Envelope)
+	}
+	if f.Exists(foo) {
+		t.Fatal("preview created the folder")
+	}
+	if code, _ := c.run("new", args, "stale"); code != http.StatusConflict {
+		t.Fatalf("stale digest: %d", code)
+	}
+	code, done := c.run("new", args, prev.Digest)
+	if code != http.StatusAccepted || done.Envelope["exit_code"] != float64(0) {
+		t.Fatalf("apply: %d %+v", code, done)
+	}
+	if !f.IsDir(filepath.Join(foo, ".git")) || !f.Exists(filepath.Join(f.CP, "projects/foo.json")) {
+		t.Fatal("apply did not create the project")
+	}
+}
+
+// The dashboard's retry sends the form's arguments again; that must finish a run that failed.
+func TestNewRetryFinishesAFailedRun(t *testing.T) {
+	f := testkit.New(t)
+	c := start(t, f, nil)
+	c.signIn()
+	foo := filepath.Join(f.Home, "foo")
+	f.Write(filepath.Join(foo, ".agentkit/BROKEN"), "")
+	args := map[string]any{"path": foo, "runtimes": []string{"claude"}}
+	_, prev := c.run("new.preview", args, "")
+	if code, done := c.run("new", args, prev.Digest); code != http.StatusAccepted || done.Envelope["exit_code"] != float64(1) {
+		t.Fatalf("failed apply: %d %+v", code, done)
+	}
+	os.Remove(filepath.Join(foo, ".agentkit/BROKEN"))
+	code, prev := c.run("new.preview", args, "")
+	if code != http.StatusAccepted || prev.Envelope["exit_code"] != float64(0) {
+		t.Fatalf("retry preview: %d %+v", code, prev.Envelope)
+	}
+	if code, done := c.run("new", args, prev.Digest); code != http.StatusAccepted || done.Envelope["exit_code"] != float64(0) {
+		t.Fatalf("retry apply: %d %+v", code, done)
+	}
+}

@@ -172,6 +172,47 @@ func hookState(data *core.Object, command string) string {
 	return state
 }
 
+// hooksMissing lists the runtimes with no acp session-start hook whose binary still exists, so
+// worktrees added later would not link themselves. Claude's home and every CCS instance count for
+// claude, Codex's hooks.json for codex.
+func hooksMissing(runtimes []string) []string {
+	command := ""
+	if bin, err := hookBinary(); err == nil {
+		command = core.ShellQuote(bin) + " link --hook"
+	}
+	installed := map[string]bool{}
+	for _, t := range core.HookTargets(nil) {
+		if !exists(t.Path) {
+			continue
+		}
+		data, err := core.ReadObject(t.Path)
+		if err != nil || !hooksShape(data) {
+			continue
+		}
+		for _, g := range hookGroups(data) {
+			group, _ := g.(*core.Object)
+			for _, h := range group.Array("hooks") {
+				ho, _ := h.(*core.Object)
+				cmd := ho.String("command")
+				bin := core.HookBinary(cmd)
+				if (command != "" && cmd == command) || (bin != "" && core.IsExecutable(resolve(bin))) {
+					if strings.HasPrefix(t.Name, "ccs ") {
+						installed["claude"] = true
+					}
+					installed[t.Name] = true
+				}
+			}
+		}
+	}
+	var missing []string
+	for _, r := range runtimes {
+		if !installed[r] {
+			missing = append(missing, r)
+		}
+	}
+	return missing
+}
+
 func cmdHooks(e *Env, a *Args) (int, error) {
 	root, err := e.Root()
 	if err != nil {

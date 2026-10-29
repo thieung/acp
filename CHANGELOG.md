@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- New `acp new <path>`: create a folder (or git init an existing one, or take an existing repo),
+  add it to the fleet, install AgentKit for `--runtimes` (default `claude`) and link personal
+  skills from `project-defaults.json` plus `--skills`. When acp ran `git init`, the paths it and
+  AgentKit created go into a marked `.git/info/exclude` block; `acp remove --yes` removes it. A
+  failed run finishes by re-running `acp new`. The dashboard has a "Tạo dự án mới" form.
 - New macOS app, `acp.app`: a Swift + WKWebView shell around the bundled acp. It shows the `acp
   web` dashboard, gives acp a clean, allow-listed environment and offers to move itself to
   Applications. Sparkle updates it once a feed and key are configured.

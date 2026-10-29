@@ -31,6 +31,8 @@ var contracts = []contract{
 	{name: "upgrade", summary: "update ak, pin the channel's latest kit, sync the fleet", mutation: true, risk: "high",
 		preview: "--dry-run", network: true},
 	{name: "add", summary: "add a repo to the fleet and sync it", mutation: true, risk: "medium", preview: "--dry-run"},
+	{name: "new", summary: "create or git init a project folder, add it, install AgentKit for the chosen runtimes and link skills",
+		mutation: true, risk: "medium", preview: "--dry-run", network: true},
 	{name: "remove", summary: "take a repo out of the fleet", mutation: true, risk: "medium",
 		preview: "default; dry run until --yes", confirm: "--yes"},
 	{name: "activity", summary: "recent Claude/Codex sessions per repo"},

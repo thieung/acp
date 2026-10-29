@@ -12,6 +12,7 @@ const overview = `acp: see and sync agent skills across your projects.
   acp sync --all           sync every project in the fleet
   acp upgrade              update the ak binary, pin the channel's latest kit, sync the fleet
   acp add [PATH]           add a repo to the fleet and sync it
+  acp new PATH             create (or git init) a project and add it; AgentKit for claude by default
   acp remove ID [--yes]    take a repo out of the fleet and drop the links acp made
   acp link [PATH]          offline: link a checkout or worktree (session hooks call this)
   acp unlink [PATH]        remove the links acp made in one checkout
@@ -82,6 +83,15 @@ func init() {
 			flags: []flagSpec{{name: "id", kind: strFlag, help: "project id (default: folder name)"}, kitFlag, channel, targets,
 				{name: "no-agentkit", kind: boolFlag, help: "personal skills only"},
 				{name: "no-sync", kind: boolFlag, help: "only write the manifest and overlay"}, dryRun, noFix}, run: cmdAdd},
+		{name: "new", help: "create or git init a project folder and add it with AgentKit and links",
+			pos: []posSpec{{name: "path", help: "folder to create, or an existing folder or repo"}},
+			flags: []flagSpec{{name: "id", kind: strFlag, help: "project id (default: folder name)"},
+				{name: "runtimes", kind: strFlag, meta: "LIST", help: "claude,codex (default: project-defaults.json, else claude)"},
+				{name: "skills", kind: strFlag, meta: "LIST", help: "personal skills to link, added to project-defaults.json's"},
+				{name: "kit", kind: strFlag, def: "engineer", help: "AgentKit kit (default: project-defaults.json, else engineer)"},
+				{name: "channel", kind: strFlag, def: "beta", choices: []string{"stable", "beta"},
+					help: "AgentKit release channel (default: project-defaults.json, else beta)"},
+				{name: "no-sync", kind: boolFlag, help: "only create, git init and register; sync later"}, dryRun}, run: cmdNew},
 		{name: "remove", help: "take a repo out of the fleet",
 			pos:   []posSpec{{name: "id", help: "project id"}},
 			flags: []flagSpec{{name: "yes", kind: boolFlag, help: "do it; default is a dry run"}}, run: cmdRemove},
