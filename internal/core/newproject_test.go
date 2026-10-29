@@ -110,6 +110,19 @@ func TestPlanNewPathRefusals(t *testing.T) {
 		!strings.Contains(err.Error(), "contains") {
 		t.Errorf("folder holding the control plane: %v", err)
 	}
+	// An agent home kept in git is still an agent home; a dotfiles repo holding one is a project.
+	f.git(f.home, "init", "-q", filepath.Join(f.home, ".claude"))
+	if _, err := PlanNewPath(root, filepath.Join(f.home, ".claude")); err == nil || !strings.Contains(err.Error(), "agent home") {
+		t.Errorf("agent home as a repo: %v", err)
+	}
+	dots := filepath.Join(f.home, "dotfiles")
+	os.MkdirAll(filepath.Join(dots, "codex"), 0o755)
+	f.git(dots, "init", "-q")
+	os.RemoveAll(filepath.Join(f.home, ".codex"))
+	f.symlink(filepath.Join(dots, "codex"), filepath.Join(f.home, ".codex"))
+	if np, err := PlanNewPath(root, dots); err != nil || np.Mode != ModeRepo {
+		t.Errorf("dotfiles repo holding an agent home: %+v %v", np, err)
+	}
 	// A link to a folder that is gone is not a missing folder to create.
 	f.symlink(filepath.Join(code, "gone"), filepath.Join(code, "dangling"))
 	if _, err := PlanNewPath(root, filepath.Join(code, "dangling")); err == nil || !strings.Contains(err.Error(), "missing folder") {

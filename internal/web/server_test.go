@@ -953,3 +953,25 @@ func TestNewPreviewThenApply(t *testing.T) {
 		t.Fatal("apply did not create the project")
 	}
 }
+
+// The dashboard's retry sends the form's arguments again; that must finish a run that failed.
+func TestNewRetryFinishesAFailedRun(t *testing.T) {
+	f := testkit.New(t)
+	c := start(t, f, nil)
+	c.signIn()
+	foo := filepath.Join(f.Home, "foo")
+	f.Write(filepath.Join(foo, ".agentkit/BROKEN"), "")
+	args := map[string]any{"path": foo, "runtimes": []string{"claude"}}
+	_, prev := c.run("new.preview", args, "")
+	if code, done := c.run("new", args, prev.Digest); code != http.StatusAccepted || done.Envelope["exit_code"] != float64(1) {
+		t.Fatalf("failed apply: %d %+v", code, done)
+	}
+	os.Remove(filepath.Join(foo, ".agentkit/BROKEN"))
+	code, prev := c.run("new.preview", args, "")
+	if code != http.StatusAccepted || prev.Envelope["exit_code"] != float64(0) {
+		t.Fatalf("retry preview: %d %+v", code, prev.Envelope)
+	}
+	if code, done := c.run("new", args, prev.Digest); code != http.StatusAccepted || done.Envelope["exit_code"] != float64(0) {
+		t.Fatalf("retry apply: %d %+v", code, done)
+	}
+}

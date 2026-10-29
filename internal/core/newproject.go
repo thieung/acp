@@ -85,13 +85,15 @@ func PlanNewPath(root *Root, path string) (NewPath, error) {
 	if within(cp, real) {
 		return NewPath{}, fmt.Errorf("%s contains the control plane %s", path, cp)
 	}
-	if np.Mode == ModeRepo {
-		return np, nil
-	}
 	for _, h := range GlobalHomes() {
-		if h = resolvePath(h); within(real, h) || within(h, real) {
+		h = resolvePath(h)
+		// A repo may hold an agent home (dotfiles with ~/.claude linked in); it may not be one.
+		if within(real, h) || within(np.Main, h) || (np.Mode != ModeRepo && within(h, real)) {
 			return NewPath{}, fmt.Errorf("%s is or holds the agent home %s", path, h)
 		}
+	}
+	if np.Mode == ModeRepo {
+		return np, nil
 	}
 	if !within(real, home) {
 		return NewPath{}, fmt.Errorf("%s is outside your home folder %s; acp new only creates or git inits folders inside it", path, home)
@@ -384,24 +386,9 @@ func NewRepoExcludeLines(dir string, rec *NewRecord) ([]string, error) {
 		case len(parts) > 3 && slices.Contains(newContainers, parts[0]+"/"+parts[1]) && !pre[strings.Join(parts[:3], "/")]:
 			line = strings.Join(parts[:3], "/") + "/"
 		}
-		lines["/"+escapeExclude(line)] = true
+		lines[escapePattern(line)] = true
 	}
 	return sortedKeys(lines), nil
-}
-
-func escapeExclude(p string) string {
-	var b strings.Builder
-	for _, r := range p {
-		if strings.ContainsRune(`*?[\`, r) {
-			b.WriteRune('\\')
-		}
-		b.WriteRune(r)
-	}
-	s := b.String()
-	if strings.HasSuffix(s, " ") {
-		s = strings.TrimSuffix(s, " ") + `\ `
-	}
-	return s
 }
 
 const (
@@ -425,6 +412,12 @@ func WriteNewRepoExclude(gitDir string, lines []string) error {
 }
 
 // RemoveNewRepoExclude takes acp new's block out of info/exclude and drops acp-new.json.
+// HasNewRepoExclude reports whether info/exclude has acp new's block.
+func HasNewRepoExclude(gitDir string) bool {
+	data, err := os.ReadFile(filepath.Join(gitDir, "info", "exclude"))
+	return err == nil && slices.Contains(strings.Split(string(data), "\n"), newBlockStart)
+}
+
 func RemoveNewRepoExclude(gitDir string) error {
 	path := filepath.Join(gitDir, "info", "exclude")
 	if isFile(path) {

@@ -94,11 +94,6 @@ func (s newSettings) manifest(id string) *core.Object {
 // savedChoices are the settings of a project acp new started: a resumed run finishes what the
 // first run chose, so flags that would change it are refused.
 func savedChoices(root *core.Root, id string, a *Args) (newSettings, error) {
-	for _, flag := range []string{"runtimes", "skills", "kit", "channel"} {
-		if a.Given(flag) {
-			return newSettings{}, usageErr("%s is being finished with the settings it was started with; drop --%s or edit projects/%s.json", id, flag, id)
-		}
-	}
 	p, err := root.ByID(id)
 	if err != nil {
 		return newSettings{}, err
@@ -114,7 +109,39 @@ func savedChoices(root *core.Root, id string, a *Args) (newSettings, error) {
 			}
 		}
 	}
+	// The same flags again (the dashboard's retry sends them) are fine; other values are not.
+	changed := ""
+	switch {
+	case a.Given("kit") && a.Str("kit") != s.kit:
+		changed = "kit"
+	case a.Given("channel") && a.Str("channel") != s.channel:
+		changed = "channel"
+	case a.Given("runtimes") && !sameSet(splitList(a.Str("runtimes")), s.runtimes):
+		changed = "runtimes"
+	}
+	for _, name := range splitList(a.Str("skills")) {
+		if changed == "" && !slices.Contains(s.skills, name) {
+			changed = "skills"
+		}
+	}
+	if changed != "" {
+		return newSettings{}, usageErr("%s is being finished with the settings it was started with; drop --%s or edit projects/%s.json", id, changed, id)
+	}
 	return s, nil
+}
+
+func sameSet(a, b []string) bool {
+	for _, x := range a {
+		if !slices.Contains(b, x) {
+			return false
+		}
+	}
+	for _, x := range b {
+		if !slices.Contains(a, x) {
+			return false
+		}
+	}
+	return true
 }
 
 // newState reads what acp new left in a repo: the record when it git-inited the repo, nil otherwise
@@ -208,7 +235,7 @@ func cmdNew(e *Env, a *Args) (int, error) {
 	}
 	// acp new owns the exclude block of a repo it git-inits (now, or in the run being finished).
 	owned := np.Mode != core.ModeRepo || (rec != nil && !rec.Done)
-	hooks := hooksInstalled(s.runtimes)
+	hooks := hooksMissing(s.runtimes)
 	e.Set("project", id)
 	e.Set("repo", np.Main)
 	e.Set("mode", string(np.Mode))
@@ -216,12 +243,13 @@ func cmdNew(e *Env, a *Args) (int, error) {
 	e.Set("manifest", manifest)
 	e.Set("runtimes", core.AnyList(s.runtimes))
 	e.Set("defaults", nilIfEmpty(s.defaults))
-	e.Set("hooks_installed", hooks)
+	e.Set("hooks_installed", len(hooks) == 0)
+	e.Set("hooks_missing", core.AnyList(hooks))
 	if a.Bool("dry-run") {
 		e.PrintLog(newPlanLog(root, s, np, id, pin, resumeID != "", owned, noSync), false)
 		text, _ := core.MarshalJSON(manifest)
 		e.Printf("%s", text)
-		printHooksWarning(e, hooks, s.runtimes)
+		printHooksWarning(e, hooks)
 		e.Printf("%s\n", e.Paint("2", "dry run: nothing was written"))
 		return 0, nil
 	}
@@ -267,7 +295,7 @@ func cmdNew(e *Env, a *Args) (int, error) {
 		if owned {
 			e.Printf("AgentKit, links and the exclude block wait; finish with: %s\n", next)
 		}
-		printHooksWarning(e, hooks, s.runtimes)
+		printHooksWarning(e, hooks)
 		return 0, nil
 	}
 	code := 0
@@ -287,7 +315,7 @@ func cmdNew(e *Env, a *Args) (int, error) {
 	if code != 0 {
 		e.Printf("AgentKit or links did not finish; fix the issue above, then run: %s\n", next)
 	}
-	printHooksWarning(e, hooks, s.runtimes)
+	printHooksWarning(e, hooks)
 	return code, nil
 }
 
@@ -407,10 +435,10 @@ func newPlanLog(root *core.Root, s newSettings, np core.NewPath, id, pin string,
 	return log
 }
 
-func printHooksWarning(e *Env, installed bool, runtimes []string) {
-	if installed {
+func printHooksWarning(e *Env, missing []string) {
+	if len(missing) == 0 {
 		return
 	}
 	e.Printf("%s session-start hooks are not installed for %s; worktrees added later will not link themselves. Run: acp hooks install\n",
-		e.Paint("33", "!"), strings.Join(runtimes, ", "))
+		e.Paint("33", "!"), strings.Join(missing, ", "))
 }

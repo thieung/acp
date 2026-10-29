@@ -172,20 +172,17 @@ func hookState(data *core.Object, command string) string {
 	return state
 }
 
-// hooksInstalled reports whether a settings file of one of these runtimes has an acp session-start
-// hook whose binary still exists, so worktrees added later link themselves. Claude's home and every
-// CCS instance count for claude, Codex's hooks.json for codex.
-func hooksInstalled(runtimes []string) bool {
+// hooksMissing lists the runtimes with no acp session-start hook whose binary still exists, so
+// worktrees added later would not link themselves. Claude's home and every CCS instance count for
+// claude, Codex's hooks.json for codex.
+func hooksMissing(runtimes []string) []string {
 	command := ""
 	if bin, err := hookBinary(); err == nil {
 		command = core.ShellQuote(bin) + " link --hook"
 	}
+	installed := map[string]bool{}
 	for _, t := range core.HookTargets(nil) {
-		applies := false
-		for _, r := range runtimes {
-			applies = applies || t.Name == r || (r == "claude" && strings.HasPrefix(t.Name, "ccs "))
-		}
-		if !applies || !exists(t.Path) {
+		if !exists(t.Path) {
 			continue
 		}
 		data, err := core.ReadObject(t.Path)
@@ -199,12 +196,21 @@ func hooksInstalled(runtimes []string) bool {
 				cmd := ho.String("command")
 				bin := core.HookBinary(cmd)
 				if (command != "" && cmd == command) || (bin != "" && core.IsExecutable(resolve(bin))) {
-					return true
+					if strings.HasPrefix(t.Name, "ccs ") {
+						installed["claude"] = true
+					}
+					installed[t.Name] = true
 				}
 			}
 		}
 	}
-	return false
+	var missing []string
+	for _, r := range runtimes {
+		if !installed[r] {
+			missing = append(missing, r)
+		}
+	}
+	return missing
 }
 
 func cmdHooks(e *Env, a *Args) (int, error) {

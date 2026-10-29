@@ -255,7 +255,9 @@ func dropNewExclude(e *Env, root *core.Root, repo string, dry bool) error {
 	} else if rec == nil {
 		return nil
 	}
-	e.Printf("- %s: the block acp new wrote\n", filepath.Join(gitDir, "info", "exclude"))
+	if core.HasNewRepoExclude(gitDir) {
+		e.Printf("- %s: the block acp new wrote\n", filepath.Join(gitDir, "info", "exclude"))
+	}
 	if dry {
 		return nil
 	}

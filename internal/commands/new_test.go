@@ -296,6 +296,12 @@ func TestNewWarnsWhenHooksAreMissing(t *testing.T) {
 	if strings.Contains(r.stdout, "acp hooks install") {
 		t.Fatalf("warned with hooks installed:\n%s", r.stdout)
 	}
+	// A Claude hook does not cover Codex.
+	r = mustOK(t, acp(t, f, "", "new", filepath.Join(f.Home, "d"), "--no-sync", "--runtimes", "claude,codex", "--dry-run"))
+	_, data := acpJSON(t, f, "new", filepath.Join(f.Home, "d"), "--no-sync", "--runtimes", "claude,codex")
+	if !strings.Contains(r.stdout, "not installed for codex;") || !reflect.DeepEqual(data["hooks_missing"], []any{"codex"}) {
+		t.Fatalf("partial hooks: %v\n%s", data, r.stdout)
+	}
 }
 
 func TestRemoveDropsTheNewExcludeBlock(t *testing.T) {
@@ -346,7 +352,8 @@ func TestNewResumeKeepsTheSettingsAndIDItStartedWith(t *testing.T) {
 			t.Errorf("%v: %d %s", c.args, r.code, r.stderr)
 		}
 	}
-	r := mustOK(t, acp(t, f, "", "new", foo, "--id", "app"))
+	// The same settings again are fine: the dashboard's retry sends them.
+	r := mustOK(t, acp(t, f, "", "new", foo, "--id", "app", "--runtimes", "codex", "--kit", "engineer", "--channel", "beta"))
 	if !strings.Contains(r.stdout, "finishing app -> "+foo) || strings.Contains(r.stdout, "git init") ||
 		f.Read(filepath.Join(foo, ".git/HEAD")) != head {
 		t.Fatalf("resume:\n%s", r.stdout)
@@ -409,6 +416,9 @@ func TestNewNoSyncLeavesTheRunToFinish(t *testing.T) {
 	}
 	if rec := readMap(t, filepath.Join(foo, ".git/acp-new.json")); rec["done"] == true {
 		t.Fatal("a --no-sync run is not done")
+	}
+	if r := mustOK(t, acp(t, f, "", "remove", "foo")); strings.Contains(r.stdout, "the block acp new wrote") {
+		t.Fatalf("remove lists a block that is not there:\n%s", r.stdout)
 	}
 	mustOK(t, acp(t, f, "", "new", foo))
 	if rec := readMap(t, filepath.Join(foo, ".git/acp-new.json")); rec["done"] != true {
