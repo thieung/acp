@@ -82,6 +82,7 @@
     'connect.apply': ['Không đổi các MCP server khác'],
     upgrade: ['Skill cá nhân', 'Tệp Git đang theo dõi'],
     add: ['Mã nguồn trong repo; acp chỉ thêm khai báo và liên kết'],
+    new: ['Các thư mục khác trên máy', 'Không tạo commit; tệp có sẵn trong thư mục vẫn hiện trong git status'],
   };
   // How a scan fix maps to the dashboard's preview and apply kinds.
   const FIX = {
@@ -381,6 +382,7 @@
         lines.changes.length ? h('div', { class: 'part' }, h('h3', { text: 'Đã thay đổi' }), lineList(lines.changes, '', '+')) : null,
         lines.issues.length ? h('div', { class: 'part' }, h('h3', { text: 'Còn lại' }), lineList(lines.issues, 'issues', '!')) : null,
         h('details', {}, h('summary', { text: 'Chi tiết kỹ thuật' }), h('pre', { text: dataOf(env).text || '' })),
+        !ok && fix.retry ? h('div', { class: 'row' }, btn(fix.retry.label, fix.retry.run, 'primary')) : null,
       ].filter(Boolean));
       toast(ok ? 'Đã áp dụng. Đang quét lại…' : 'Có lỗi khi áp dụng.');
       await load();
@@ -515,6 +517,7 @@
       h('p', { class: 'lead' }, 'Mỗi dự án có bản chính và các ', term('worktree'), '. acp gắn ', term('skill'), ' của ',
         term('AgentKit'), ' và skill cá nhân vào cả hai bằng ', term('liên kết'), '.'),
       h('div', { class: 'row' },
+        btn('Tạo dự án mới', openNew),
         btn('Thêm dự án', openAdd),
         btn('Đồng bộ tất cả', () => openFix('Đồng bộ mọi dự án', { preview: 'sync.preview', apply: 'sync', args: { all: true } }, 'safe'))));
     const cards = projects.map((p) => {
@@ -549,6 +552,38 @@
     }, 'primary');
     openSheet('Thêm dự án', [h('p', { text: 'Đường dẫn tới repo Git trên máy này. acp thêm nó vào danh sách và gắn skill.' }), input], [go2]);
     input.focus();
+  }
+
+  // openNew creates a folder (or git-inits one) and adds it, AgentKit for the ticked runtimes.
+  function openNew() {
+    const path = h('input', { type: 'text', placeholder: '/Users/ban/projects/du-an-moi', 'aria-label': 'Thư mục dự án' });
+    const id = h('input', { type: 'text', placeholder: 'mặc định: tên thư mục', 'aria-label': 'Mã dự án' });
+    const skills = h('input', { type: 'text', placeholder: 'vd: html, html-plan', 'aria-label': 'Skill cá nhân' });
+    const boxes = ['claude', 'codex'].map((r) => {
+      const box = h('input', { type: 'checkbox', value: r });
+      box.checked = r === 'claude';
+      return { r, box, label: h('label', {}, box, h('span', { text: r === 'claude' ? 'Claude Code' : 'Codex' })) };
+    });
+    const go2 = btn('Xem trước', () => {
+      const p = path.value.trim();
+      const runtimes = boxes.filter((b) => b.box.checked).map((b) => b.r);
+      if (!p.startsWith('/')) { toast('Nhập đường dẫn đầy đủ, bắt đầu bằng /'); return; }
+      if (!runtimes.length) { toast('Chọn ít nhất một trợ lý'); return; }
+      const args = { path: p, runtimes };
+      if (id.value.trim()) args.id = id.value.trim();
+      const list = skills.value.split(',').map((x) => x.trim()).filter(Boolean);
+      if (list.length) args.skills = list;
+      const title = 'Tạo ' + p;
+      const fix = { preview: 'new.preview', apply: 'new', args };
+      fix.retry = { label: 'Chạy lại để hoàn tất', run: () => openFix(title, fix, 'confirm') };
+      openFix(title, fix, 'confirm');
+    }, 'primary');
+    openSheet('Tạo dự án mới', [
+      h('p', { text: 'acp tạo thư mục (hoặc git init thư mục có sẵn), thêm vào danh sách, cài AgentKit cho trợ lý bạn chọn và gắn skill. Thư mục cha phải có sẵn và nằm trong thư mục nhà của bạn.' }),
+      path,
+      h('div', { class: 'checks' }, boxes.map((b) => b.label)),
+      id, skills], [go2]);
+    path.focus();
   }
 
   async function openSkills(id) {

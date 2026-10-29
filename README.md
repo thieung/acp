@@ -31,6 +31,7 @@ acp                    # fleet table: AgentKit version, personal skills, worktre
 acp sync               # sync the project you are in (main checkout or worktree)
 acp upgrade            # ak binary + newest kit pin of the channel + sync the fleet
 acp add [path]         # add a repo to the fleet, then sync it
+acp new <path>         # create (or git init) a project, add it, AgentKit for claude by default
 acp remove <id> --yes  # drop a repo and remove the links acp made
 acp doctor             # like status, exit 1 on drift
 acp scan               # read-only health check in plain language
@@ -50,6 +51,50 @@ acp describe --json    # every command's contract for agents (acp.describe/2)
 
 Every command takes `--json` and prints `{schema_version, kind, data}`, plus `error` when it
 fails. `acp sync --dry-run` previews.
+
+## New projects
+
+`acp new <path>` makes a project in one step. A missing folder is created (its parent must exist),
+an existing folder that is not a repo gets `git init`, and an existing repo is added like
+`acp add`. acp then installs AgentKit for the runtimes you pick and links personal skills.
+
+```bash
+acp new ~/code/foo                              # AgentKit for Claude Code only
+acp new ~/code/foo --runtimes claude,codex --skills html,html-plan
+acp new ~/code/foo --dry-run                    # every step, nothing written
+```
+
+Defaults come from `project-defaults.json` in the control plane; flags win over it, and
+`--skills` adds to its skills:
+
+```json
+{
+  "schemaVersion": 1,
+  "agentkit": {"kit": "engineer", "channel": "beta"},
+  "runtimes": ["claude"],
+  "skills": ["html"]
+}
+```
+
+Without the file acp uses `engineer`, `beta`, `claude` and no personal skills. A typo or a
+wrong type in the file is an error.
+
+- No commit is made. When acp ran `git init`, it lists the paths AgentKit and acp created in a
+  marked block of `.git/info/exclude`, so a first `git add -A` does not commit them. Files that
+  were already in the folder, and files you add later, stay visible. Skills added later with
+  `acp skills set` are not added to the block. `acp remove <id> --yes` takes the block out.
+- acp refuses `/`, your home folder, the control plane, agent homes, folders inside another
+  repo, `.git` folders and bare repos, and creating or git-initing anything outside your home
+  folder. It stops before writing anything when the channel has no kit pin (run `acp upgrade`)
+  or `ak` is missing, unless you pass `--no-sync`.
+- If AgentKit fails part way, or you passed `--no-sync`, acp keeps what it made and tells you
+  to run `acp new <path>` again, which finishes the job with the settings and id the first run
+  chose (flags that would change them are refused). Once a run finished, `acp new` on the same
+  folder points you to `acp sync`.
+- acp warns when the session-start hooks are missing (`acp hooks install`); worktrees you add
+  later link themselves only with them.
+
+The dashboard has the same flow under "Tạo dự án mới".
 
 ## Where acp looks
 
