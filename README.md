@@ -176,8 +176,24 @@ cd desktop && swift test && cd ..                    # macOS app
 sh scripts/build-desktop.sh v0.0.0-dev && sh scripts/tests/desktop-smoke.sh dist/desktop/acp.app v0.0.0-dev
 ```
 
-CI runs the tests on Ubuntu and macOS, then tries the installer. On macOS it also builds the app
-(signed ad hoc), runs the smoke test and keeps the DMG as a workflow artifact. Pushing a tag `v*` runs the release workflow:
+There is no CI on GitHub. `sh scripts/verify.sh` runs every check on your machine, in a throwaway
+copy so the checkout and `dist/` stay untouched:
+1. `go vet`, `go test -race` and the installer tests on macOS.
+2. The same in a `golang` container of the `go.mod` version, as a non-root user (needs Docker, for
+   example OrbStack; `--skip-linux` leaves it out).
+3. `swift test`, then builds the app (signed ad hoc) and runs its smoke test, which opens the app
+   for a moment (`--skip-desktop` leaves it out).
+
+`--rev REV` checks one commit instead of the working tree. To run it before every push:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook checks each pushed commit once. It skips the app when the push changes nothing the app
+is built from, and passes `ACP_VERIFY_FLAGS` (for example `--skip-linux`) on to verify.sh.
+
+Pushing a tag `v*` runs the release workflow on GitHub Actions:
 1. It builds four archives (darwin/linux × arm64/amd64).
 2. It writes `checksums.txt` and `install.sh`.
 3. It creates the GitHub Release. A tag with a `-` in it is a prerelease.

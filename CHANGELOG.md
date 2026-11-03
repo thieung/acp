@@ -11,8 +11,10 @@
   web` dashboard, gives acp a clean, allow-listed environment and offers to move itself to
   Applications. Sparkle updates it once a feed and key are configured.
   `scripts/build-desktop.sh` builds a universal app and DMG, and `scripts/tests/desktop-smoke.sh`
-  launches it. CI builds and smokes it; a release attaches the DMG only when it is signed and
-  notarized.
+  launches it. A release attaches the DMG only when it is signed and notarized.
+- The GitHub CI workflows (`ci.yml`, `desktop.yml`) are gone. `scripts/verify.sh` runs the same
+  checks on your machine (macOS, Linux in Docker, the macOS app), and `.githooks/pre-push` runs it
+  on each pushed commit once `git config core.hooksPath .githooks` is set.
 - `acp setup login --api-key-stdin` signs in to AgentKit with an API key read from stdin. The
   key reaches `ak` on stdin only, never argv, the environment, logs or output. The dashboard has
   a sign-in form for it.
