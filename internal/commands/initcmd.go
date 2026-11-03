@@ -15,7 +15,10 @@ var agentsTemplate string
 const initGitignore = "projects.local.json\nruntime/\n"
 
 // cmdInit creates whatever a control plane is missing; it never overwrites an existing file. It
-// records the root in the config file so later commands find it without ACP_ROOT.
+// records the root in the config file so later commands find it without ACP_ROOT. With ACP_ROOT
+// set it records nothing: that variable already wins over the record, and it is usually a
+// one-shell override (a test or a throwaway control plane) that must not move the root every
+// other shell, the app and the hooks use.
 func cmdInit(e *Env, a *Args) (int, error) {
 	dir := a.Str("root")
 	if dir == "" {
@@ -109,6 +112,12 @@ func cmdInit(e *Env, a *Args) (int, error) {
 	e.Set("applied", !dry)
 	if dry {
 		e.Printf("%s\n", e.Paint("2", "dry run: nothing was written"))
+		return 0, nil
+	}
+	e.Set("recorded", os.Getenv("ACP_ROOT") == "")
+	if os.Getenv("ACP_ROOT") != "" {
+		e.Printf("control plane: %s (not recorded in %s: ACP_ROOT is set)\n", root.Dir, conf)
+		e.Printf("%s\n", e.Paint("2", "to record it, run `acp init --root "+root.Dir+"` without ACP_ROOT"))
 		return 0, nil
 	}
 	if old, err := os.ReadFile(conf); err != nil || strings.TrimSpace(string(old)) != dir {

@@ -101,6 +101,11 @@ The dashboard has the same flow under "Tạo dự án mới".
 `acp init` creates or adopts a control plane (`projects/`, the AgentKit lock, the machine
 overlay, `runtime/`, `AGENTS.md`). It ships no personal skills.
 
+init records the control plane it set up, so later commands find it without `ACP_ROOT`. With
+`ACP_ROOT` set it records nothing: the variable already wins, and it is usually a one-shell
+override, such as a throwaway control plane, that must not move the root other shells, the app
+and the hooks use. Run `acp init --root <dir>` without `ACP_ROOT` to record one.
+
 Without `--root`, init uses the first of these that applies, so rerunning the installer never moves the control plane:
 1. `ACP_ROOT`.
 2. The control plane it recorded last time.

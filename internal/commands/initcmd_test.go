@@ -129,7 +129,17 @@ func TestInitWithoutRootKeepsTheRecordedControlPlane(t *testing.T) {
 		t.Fatal("a second, empty control plane was created")
 	}
 	t.Setenv("ACP_ROOT", f.CP)
-	if r := mustOK(t, acp(t, f, "", "init", "--json")); !strings.Contains(r.stdout, f.CP) {
-		t.Fatalf("ACP_ROOT not used: %s", r.stdout)
+	if r := mustOK(t, acp(t, f, "", "init", "--json")); !strings.Contains(r.stdout, f.CP) ||
+		!strings.Contains(r.stdout, `"recorded": false`) {
+		t.Fatalf("ACP_ROOT not used, or recorded: %s", r.stdout)
+	}
+	// ACP_ROOT is an override for one shell: init with it, even with --root, leaves the record alone.
+	other := filepath.Join(f.Base, "throwaway")
+	r := mustOK(t, acp(t, f, "", "init", "--root", other))
+	if !strings.Contains(r.stdout, "not recorded") || !f.Exists(filepath.Join(other, "projects")) {
+		t.Fatalf("init with ACP_ROOT and --root: %s", r.stdout)
+	}
+	if got, _ := os.ReadFile(conf); string(got) != string(before) {
+		t.Fatalf("ACP_ROOT moved the record: %q -> %q", before, got)
 	}
 }
