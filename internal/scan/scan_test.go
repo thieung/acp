@@ -351,3 +351,29 @@ func contains(list []string, s string) bool {
 	}
 	return false
 }
+
+// A link an older acp made to the main checkout's agent memory shows in git status; the fix scan
+// offers (acp link) removes it, so the finding goes away.
+func TestScanFixDropsOldStateLinks(t *testing.T) {
+	f := synced(t)
+	f.Write(filepath.Join(f.Repo, ".claude/agent-memory/m.md"), "main's")
+	f.Symlink(filepath.Join(f.Repo, ".claude/agent-memory"), filepath.Join(f.WT, ".claude/agent-memory"))
+	r := run(t, f, Options{})
+	var fix *Fix
+	for _, fd := range r.Findings {
+		if fd.Code == "untracked_acp_links" {
+			fix = fd.Fix
+		}
+	}
+	if fix == nil || fix.Kind != "link" {
+		t.Fatalf("codes %v", codes(r))
+	}
+	root := &core.Root{Dir: f.CP}
+	p, _ := root.ByID("demo")
+	if err := core.NewEngine(root).SyncCheckout(p, f.Repo, f.WT, core.NewLog(""), core.LinkOpts{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := codes(run(t, f, Options{})); contains(got, "untracked_acp_links") || contains(got, "worktree_unlinked") {
+		t.Fatalf("after acp link: %v", got)
+	}
+}

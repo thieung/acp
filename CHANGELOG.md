@@ -21,6 +21,15 @@
   - `acp status` adds `files_missing` to each target and marks the target not ok, so
     `acp doctor` exits 1.
   - `acp sync` runs `ak kit refresh` at the same version, which writes the files back.
+- `acp link` (and so `acp sync` and the worktree hook) removes links an older acp made in
+  worktrees to the main checkout's per-checkout state, such as `.claude/agent-memory`, hook logs
+  and runtime files. acp stopped mirroring these, but left the old links, so `git status` kept
+  listing them and the `untracked_acp_links` fix that `acp scan` offered changed nothing. Only a
+  link to the same path in the main checkout is removed; the data stays in the main checkout.
+- `acp init` no longer records the control plane when `ACP_ROOT` is set. The variable already
+  wins over the record, and a one-shell override such as a throwaway control plane moved the
+  root that other shells, the app and the hooks use. `acp init --root <dir>` without `ACP_ROOT`
+  records it.
 - New `acp new <path>`: create a folder (or git init an existing one, or take an existing repo),
   add it to the fleet, install AgentKit for `--runtimes` (default `claude`) and link personal
   skills from `project-defaults.json` plus `--skills`. When acp ran `git init`, the paths it and
