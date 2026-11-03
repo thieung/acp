@@ -268,7 +268,7 @@ func TestSelectionMatches(t *testing.T) {
 	for _, c := range cases {
 		ak, _ := ParseJSON([]byte(c.ak))
 		p := &Project{ID: "x", Manifest: Obj("agentkit", ak)}
-		if got := e.SelectionMatches(p, c.recorded); got != c.want {
+		if got := e.SelectionMatches(p.Kits()[0], c.recorded); got != c.want {
 			t.Errorf("%s vs %v: got %v", c.ak, c.recorded, got)
 		}
 	}

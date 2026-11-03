@@ -71,7 +71,9 @@ func cmdUpgrade(e *Env, a *Args) (int, error) {
 	kitSet := map[string]bool{}
 	for _, p := range fleet {
 		if p.AK() != nil && p.Channel() == channel {
-			kitSet[p.Kit()] = true
+			for _, k := range p.Kits() {
+				kitSet[k.Name] = true
+			}
 		}
 	}
 	if k := a.Str("kit"); k != "" {

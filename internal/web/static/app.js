@@ -525,9 +525,10 @@
       const facts = [
         ['AgentKit', ak.kit ? [ak.kit, ak.channel, ak.pin].filter(Boolean).join(' · ') : 'Không dùng'],
         ['Skill AgentKit', ak.skills != null ? String(ak.skills) : '–'],
+        toArray(ak.extra_kits).length ? ['Kit thêm', toArray(ak.extra_kits).map((k) => [k.kit, k.pin].filter(Boolean).join(' · ')).join(', ')] : null,
         ['Skill cá nhân', p.personal ? p.personal.linked + '/' + p.personal.total + ' đã gắn' : '–'],
         ['Worktree', p.worktrees ? p.worktrees.linked + '/' + p.worktrees.total + ' đã gắn' : '–'],
-      ];
+      ].filter(Boolean);
       if (state.tech) facts.push(['Thư mục', p.repo]);
       return h('article', { class: 'card' },
         h('div', { class: 'row' }, h('h3', { text: p.id }), p.healthy ? tag('ok', 'Ổn') : tag('warn', 'Cần đồng bộ')),
@@ -616,6 +617,8 @@
     body.replaceChildren(...[
       h('p', { class: 'muted', text: 'Đánh dấu để thêm, bỏ đánh dấu để gỡ. Chưa có gì thay đổi cho tới khi bạn áp dụng.' }),
       ak.kit ? group('Skill AgentKit · ' + ak.kit, toArray(ak.catalog), akSelected) : null,
+      ...toArray(ak.extra_kits).map((k) => group('Skill AgentKit · ' + k.kit, toArray(k.catalog),
+        new Set(k.mode === 'all' ? toArray(k.catalog) : toArray(k.selected)))),
       group('Skill cá nhân', toArray(personal.catalog), personalSelected)].filter(Boolean));
     next.addEventListener('click', () => {
       const add = [...want].filter(([, v]) => v).map(([k]) => k);

@@ -57,10 +57,14 @@ func (p *Project) AKTargets() []string {
 	return append([]string(nil), TargetNames...)
 }
 
-// AKSkills is "all" or the selected skill list.
-func (p *Project) AKSkills() (all bool, list []string) {
-	ak := p.AK()
-	v, ok := ak.Get("skills")
+// AKSkills is "all" or the selected skill list of the primary kit.
+func (p *Project) AKSkills() (all bool, list []string) { return skillSelection(p.AK()) }
+
+func (p *Project) AKExclude() []string { return p.AK().Strings("exclude") }
+
+// skillSelection reads a kit's "skills": absent or "all" selects every skill, a list selects those.
+func skillSelection(o *Object) (all bool, list []string) {
+	v, ok := o.Get("skills")
 	if !ok {
 		return true, nil
 	}
@@ -70,7 +74,82 @@ func (p *Project) AKSkills() (all bool, list []string) {
 	return false, StringList(asArray(v))
 }
 
-func (p *Project) AKExclude() []string { return p.AK().Strings("exclude") }
+// KitSpec is one AgentKit kit a project uses, with its own skill selection. Every kit of a project
+// shares the agentkit block's channel and targets.
+type KitSpec struct {
+	Name    string
+	All     bool     // every skill of the kit, minus Exclude
+	Skills  []string // the selection when !All
+	Exclude []string
+	Primary bool
+	// Entry is the manifest object holding this kit's "skills" and "exclude": the agentkit block
+	// for the primary kit, its agentkit.extra_kits entry otherwise.
+	Entry *Object
+}
+
+// Kits is the primary kit (agentkit.kit) followed by each agentkit.extra_kits entry in manifest
+// order, nil without AgentKit. An extra entry with an invalid name or a kit already listed is
+// skipped; BadExtraKits names them.
+func (p *Project) Kits() []KitSpec {
+	ak := p.AK()
+	if ak == nil {
+		return nil
+	}
+	all, list := skillSelection(ak)
+	out := []KitSpec{{Name: p.Kit(), All: all, Skills: list, Exclude: ak.Strings("exclude"), Primary: true, Entry: ak}}
+	seen := map[string]bool{p.Kit(): true}
+	for _, it := range ak.Array("extra_kits") {
+		o, ok := it.(*Object)
+		if !ok {
+			continue
+		}
+		name := o.String("kit")
+		if !ValidName(name) || seen[name] {
+			continue
+		}
+		seen[name] = true
+		all, list := skillSelection(o)
+		out = append(out, KitSpec{Name: name, All: all, Skills: list, Exclude: o.Strings("exclude"), Entry: o})
+	}
+	return out
+}
+
+// UsesKit reports whether a kit is one of the project's kits.
+func (p *Project) UsesKit(kit string) bool {
+	for _, k := range p.Kits() {
+		if k.Name == kit {
+			return true
+		}
+	}
+	return false
+}
+
+// BadExtraKits describes agentkit.extra_kits entries that Kits skips.
+func (p *Project) BadExtraKits() []string {
+	ak := p.AK()
+	if ak == nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{p.Kit(): true}
+	for i, it := range ak.Array("extra_kits") {
+		o, ok := it.(*Object)
+		name := ""
+		if ok {
+			name = o.String("kit")
+		}
+		switch {
+		case !ok || !ValidName(name):
+			out = append(out, fmt.Sprintf("agentkit.extra_kits[%d] has no valid \"kit\"", i))
+		case seen[name]:
+			out = append(out, fmt.Sprintf("agentkit.extra_kits[%d] repeats kit %q", i, name))
+		}
+		if ok && ValidName(name) {
+			seen[name] = true
+		}
+	}
+	return out
+}
 
 func asArray(v any) []any { a, _ := v.([]any); return a }
 

@@ -117,7 +117,7 @@ func (e *Engine) KitCatalog(kit string) []string {
 	names := map[string]bool{}
 	if fleet, err := e.Root.Fleet(); err == nil {
 		for _, p := range fleet {
-			if p.Repo == "" || p.AK() == nil || p.Kit() != kit {
+			if p.Repo == "" || !p.UsesKit(kit) {
 				continue
 			}
 			for _, target := range p.AKTargets() {
@@ -149,11 +149,11 @@ func setOf(items []string) map[string]bool {
 	return m
 }
 
-// SelectionMatches reports whether an install recorded the manifest's skill selection.
-func (e *Engine) SelectionMatches(p *Project, manifest *Object) bool {
+// SelectionMatches reports whether an install recorded a kit's skill selection.
+func (e *Engine) SelectionMatches(k KitSpec, manifest *Object) bool {
 	recorded := manifest.Object("skill_selection")
-	all, list := p.AKSkills()
-	excluded := setOf(p.AKExclude())
+	all, list := k.All, k.Skills
+	excluded := setOf(k.Exclude)
 	if all && len(excluded) == 0 {
 		return recorded.String("mode") == "all"
 	}
@@ -173,7 +173,7 @@ func (e *Engine) SelectionMatches(p *Project, manifest *Object) bool {
 			return false
 		}
 	}
-	catalog := e.KitCatalog(p.Kit())
+	catalog := e.KitCatalog(k.Name)
 	if len(catalog) == 0 {
 		return true
 	}
@@ -202,86 +202,124 @@ func (e *Engine) StoreLinks(checkout, runtime string) []string {
 	return out
 }
 
-// SyncNative installs or refreshes AgentKit in a main checkout at the pinned version.
+// SyncNative installs or refreshes every AgentKit kit of a project in a main checkout, each at
+// its pinned version. Per target the primary kit goes first, so on Claude Code it owns the files
+// the kits share (ak keeps the first owner). On Codex the kits overwrite each other's shared
+// agents, the last writer winning (bestagentkits/agentkit#2980), so after an extra kit ran there
+// the primary kit is refreshed once more.
 func (e *Engine) SyncNative(ctx context.Context, p *Project, main string, log *Log, dry bool) {
-	if p.AK() == nil {
+	kits := p.Kits()
+	if kits == nil {
 		return
 	}
-	kit, channel := p.Kit(), p.Channel()
-	pin := e.Root.PinnedVersion(channel, kit)
-	if pin == "" {
-		log.Issue("no %s/%s pin in agentkit-releases.lock.json; run `acp upgrade`", channel, kit)
-		return
+	for _, bad := range p.BadExtraKits() {
+		log.Issue("%s; skipped", bad)
 	}
-	bin, binErr := "", error(nil)
+	channel := p.Channel()
+	pins := map[string]string{}
+	for _, k := range kits {
+		if pins[k.Name] = e.Root.PinnedVersion(channel, k.Name); pins[k.Name] == "" {
+			log.Issue("no %s/%s pin in agentkit-releases.lock.json; run `acp upgrade`", channel, k.Name)
+		}
+	}
+	ak := &akBin{}
 	for _, target := range p.AKTargets() {
-		runtime, ok := Targets[target]
-		if !ok {
+		if _, ok := Targets[target]; !ok {
 			log.Issue("unknown AgentKit target %q", target)
 			continue
 		}
-		recorded := InstallManifest(main, target, kit)
-		have := InstalledVersion(recorded)
-		stale := e.StoreLinks(main, runtime)
-		same := e.SelectionMatches(p, recorded)
-		var missing []string
-		if have != "" {
-			missing = MissingKitFiles(main, target, kit)
-		}
-		if have == pin && same && len(stale) == 0 && len(missing) == 0 {
-			log.Ok("AgentKit %s %s (%s)", kit, pin, target)
-			continue
-		}
-		why := ""
-		if !same && recorded.Len() > 0 {
-			why = ", new skill selection"
-		}
-		if len(missing) > 0 {
-			// A refresh at the same version writes them back.
-			why += fmt.Sprintf(", %d recorded file(s) missing", len(missing))
-		}
-		label := have
-		if label == "" {
-			label = "not installed"
-			if recorded.Len() > 0 {
-				label = "2.x"
+		primaryReady, extraRan := false, false
+		for _, k := range kits {
+			pin := pins[k.Name]
+			if pin == "" {
+				continue
+			}
+			changed, ok := e.syncKit(ctx, k, channel, pin, main, target, ak, log, dry)
+			if k.Primary {
+				primaryReady = ok
+			} else if changed {
+				extraRan = true
 			}
 		}
-		log.Change("~ AgentKit %s %s: %s -> %s%s", kit, target, label, pin, why)
+		if target != "codex" || !extraRan || !primaryReady || len(kits) < 2 {
+			continue
+		}
+		primary, pin := kits[0].Name, pins[kits[0].Name]
+		log.Change("~ AgentKit %s %s: refresh %s again so its shared agents win", primary, target, pin)
 		if dry {
 			continue
 		}
-		if bin == "" && binErr == nil {
-			if bin, binErr = AkBin(); binErr != nil {
-				log.Issue("%v", binErr)
-			}
+		if bin := ak.get(log); bin != "" {
+			e.runAk(ctx, bin, []string{"kit", "refresh", primary, "--channel", channel, "--version", pin,
+				"--target", target, "--yes", "--no-interactive"}, main, target, pin, e.StoreLinks(main, Targets[target]), log)
+			e.catalog = nil
 		}
-		if binErr != nil {
-			continue
-		}
-		args := []string{"kit", "refresh", kit}
-		if have == "" || !same {
-			// Nothing yet, a 2.x install, or a changed selection: start from kit-only output.
-			args = []string{"kit", "init", kit}
-			if recorded.Len() > 0 {
-				args = append(args, "--fresh")
-			}
-			if all, list := p.AKSkills(); !all {
-				args = append(args, "--skills", strings.Join(list, ","))
-			}
-			if ex := p.AKExclude(); len(ex) > 0 {
-				args = append(args, "--exclude-skills", strings.Join(ex, ","))
-			}
-		}
-		args = append(args, "--channel", channel, "--version", pin, "--target", target, "--yes", "--no-interactive")
-		e.runAk(ctx, bin, args, main, target, pin, stale, log)
-		e.catalog = nil
 	}
+}
+
+// syncKit brings one kit of one target to its pin. changed says ak had (or, dry, would have) to
+// run; ok says the kit is at its pin afterwards (dry: would be).
+func (e *Engine) syncKit(ctx context.Context, k KitSpec, channel, pin, main, target string, ak *akBin, log *Log, dry bool) (changed, ok bool) {
+	kit := k.Name
+	recorded := InstallManifest(main, target, kit)
+	have := InstalledVersion(recorded)
+	stale := e.StoreLinks(main, Targets[target])
+	same := e.SelectionMatches(k, recorded)
+	var missing []string
+	if have != "" {
+		missing = MissingKitFiles(main, target, kit)
+	}
+	if have == pin && same && len(stale) == 0 && len(missing) == 0 {
+		log.Ok("AgentKit %s %s (%s)", kit, pin, target)
+		return false, true
+	}
+	why := ""
+	if !same && recorded.Len() > 0 {
+		why = ", new skill selection"
+	}
+	if len(missing) > 0 {
+		// A refresh at the same version writes them back.
+		why += fmt.Sprintf(", %d recorded file(s) missing", len(missing))
+	}
+	label := have
+	if label == "" {
+		label = "not installed"
+		if recorded.Len() > 0 {
+			label = "2.x"
+		}
+	}
+	log.Change("~ AgentKit %s %s: %s -> %s%s", kit, target, label, pin, why)
+	if dry {
+		return true, true
+	}
+	bin := ak.get(log)
+	if bin == "" {
+		return true, false
+	}
+	args := []string{"kit", "refresh", kit}
+	if have == "" || !same {
+		// Nothing yet, a 2.x install, or a changed selection: start from kit-only output.
+		args = []string{"kit", "init", kit}
+		if recorded.Len() > 0 {
+			args = append(args, "--fresh")
+		}
+		if !k.All {
+			args = append(args, "--skills", strings.Join(k.Skills, ","))
+		}
+		if len(k.Exclude) > 0 {
+			args = append(args, "--exclude-skills", strings.Join(k.Exclude, ","))
+		}
+	}
+	args = append(args, "--channel", channel, "--version", pin, "--target", target, "--yes", "--no-interactive")
+	ok = e.runAk(ctx, bin, args, main, target, pin, stale, log)
+	e.catalog = nil
+	return true, ok
 }
 
 // runAk moves aside what ak refuses to write through (retired store links, a symlinked
 // .codex/hooks.json), runs ak, and puts them back if ak fails.
-func (e *Engine) runAk(ctx context.Context, bin string, args []string, main, target, pin string, stale []string, log *Log) {
+// It reports whether ak succeeded and the install manifest shows the pin.
+func (e *Engine) runAk(ctx context.Context, bin string, args []string, main, target, pin string, stale []string, log *Log) bool {
 	saved := map[string]string{}
 	for _, link := range stale {
 		if raw, err := os.Readlink(link); err == nil {
@@ -306,7 +344,7 @@ func (e *Engine) runAk(ctx context.Context, bin string, args []string, main, tar
 		path := filepath.Join(e.Root.Backups(), "store-links-"+e.Now().Format("20060102-150405.000000")+".json")
 		if err := WriteJSON(path, record, 0o644); err != nil {
 			log.Issue("cannot back up the links ak needs moved (%v); nothing changed", err)
-			return
+			return false
 		}
 	}
 	for link := range saved {
@@ -324,8 +362,9 @@ func (e *Engine) runAk(ctx context.Context, bin string, args []string, main, tar
 	if res.OK() {
 		if InstalledVersion(InstallManifest(main, target, args[2])) != pin {
 			log.Issue("%s: ak finished but the install manifest does not show %s", target, pin)
+			return false
 		}
-		return
+		return true
 	}
 	for _, link := range sortedMapKeys(saved) {
 		if Exists(link) {
@@ -344,6 +383,13 @@ func (e *Engine) runAk(ctx context.Context, bin string, args []string, main, tar
 			os.Symlink(hooksLink, hooks)
 		}
 	}
+	reportAkFailure(log, args, "for "+target, res)
+	return false
+}
+
+// reportAkFailure logs a failed ak run: the first error line (or the last line) as the issue, and
+// the command with up to 60 lines of its output as details.
+func reportAkFailure(log *Log, args []string, what string, res ExecResult) {
 	var detail []string
 	for _, line := range strings.Split(res.Stderr+res.Stdout, "\n") {
 		if strings.TrimSpace(line) != "" {
@@ -362,11 +408,11 @@ func (e *Engine) runAk(ctx context.Context, bin string, args []string, main, tar
 	}
 	switch {
 	case res.TimedOut:
-		log.Issue("`ak kit %s` timed out for %s after %s (ACP_AK_TIMEOUT)", args[1], target, AKTimeout())
+		log.Issue("`ak kit %s` timed out %s after %s (ACP_AK_TIMEOUT)", args[1], what, AKTimeout())
 	case res.Err != nil:
-		log.Issue("`ak kit %s` failed for %s: %v", args[1], target, res.Err)
+		log.Issue("`ak kit %s` failed %s: %v", args[1], what, res.Err)
 	default:
-		log.Issue("`ak kit %s` failed for %s (exit %d): %s", args[1], target, res.Code, first)
+		log.Issue("`ak kit %s` failed %s (exit %d): %s", args[1], what, res.Code, first)
 	}
 	if len(detail) > 60 {
 		detail = detail[len(detail)-60:]
@@ -389,6 +435,9 @@ type SyncOpts struct {
 	Dry    bool
 	Native bool // run AgentKit (false: --offline)
 	Adopt  bool
+	// RemoveKits are kits to uninstall before AgentKit syncs (with Native), ones the manifest
+	// just dropped.
+	RemoveKits []string
 }
 
 // SyncProject syncs AgentKit, personal links and every worktree of one project.
@@ -405,6 +454,9 @@ func (e *Engine) SyncProject(ctx context.Context, p *Project, o SyncOpts) []*Log
 	main := resolvePath(p.Repo)
 	head := NewLog(p.ID + "  " + main)
 	if o.Native {
+		if len(o.RemoveKits) > 0 {
+			e.RemoveKits(ctx, p, main, o.RemoveKits, head, o.Dry)
+		}
 		e.SyncNative(ctx, p, main, head, o.Dry)
 	}
 	if err := e.SyncCheckout(p, main, main, head, LinkOpts{Dry: o.Dry}); err != nil && ctx.Err() != nil {

@@ -40,6 +40,8 @@ acp web                # dashboard on 127.0.0.1:8780; every change is previewed 
 acp mcp                # MCP server over stdio: scan, status, explain, fix preview
 acp skills set <id> --add herdr --remove ak-shopify   # preview; add --apply to write
 acp kit add <id> --apply
+acp kit add <id> --kit marketing --apply      # a second kit next to the project's kit
+acp kit remove <id> --kit marketing --apply   # uninstall it again
 acp setup              # is ak installed and signed in, doctor, pins
 acp setup install-ak --apply
 acp setup login --api-key-stdin <key.txt   # sign in to AgentKit without a terminal prompt
@@ -95,6 +97,29 @@ wrong type in the file is an error.
   later link themselves only with them.
 
 The dashboard has the same flow under "Tạo dự án mới".
+
+## Several kits in one project
+
+A project can use more than one AgentKit kit, for example engineer and marketing. The first kit
+(`agentkit.kit`) is the primary kit; `acp kit add <id> --kit NAME` adds another to
+`agentkit.extra_kits`. Every kit shares the project's channel and targets, has its own pin in
+`agentkit-releases.lock.json` (`acp upgrade` pins every kit the fleet uses) and its own skill
+selection:
+
+```json
+"agentkit": {"kit": "engineer", "channel": "beta", "targets": ["claude-code", "codex"], "skills": "all",
+  "extra_kits": [{"kit": "marketing", "skills": "all", "exclude": ["mk-seo"]}]}
+```
+
+- `acp sync` installs the primary kit first on each target, so on Claude Code it owns the files
+  the kits share (ak keeps the first owner). On Codex the last kit to write a shared agent wins
+  ([bestagentkits/agentkit#2980](https://github.com/bestagentkits/agentkit/issues/2980)), so
+  after another kit ran there acp refreshes the primary kit once more.
+- `acp kit remove <id> --kit NAME` runs `ak kit uninstall`, which can delete files the primary
+  kit shares ([bestagentkits/agentkit#2981](https://github.com/bestagentkits/agentkit/issues/2981)),
+  then refreshes the primary kit on each target and syncs. acp does not remove the primary kit.
+- `acp skills set` changes the kit whose catalog has the skill. `acp status`, `acp scan` and
+  `acp skills list` report each kit; scan findings for an added kit name it in the subject.
 
 ## Where acp looks
 

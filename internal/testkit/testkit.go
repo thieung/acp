@@ -12,9 +12,14 @@ import (
 )
 
 // FakeAK stands in for the AgentKit CLI. `kit init|refresh` records the call in .ak-calls, writes
-// ak-cook (and .claude/agents for claude-code), an install manifest and, like ak, the absolute
-// paths of the files it wrote in native-skill-paths.json; it fails like ak when
-// .agentkit/BROKEN exists, when .codex/hooks.json is a symlink or when ak-cook is a symlink.
+// ak-cook (another kit than engineer writes <kit>-brief) and .claude/agents/planner.md for
+// claude-code, an install manifest and, like ak, the absolute paths of the files it claims in
+// native-skill-paths.json; it fails like ak when .agentkit/BROKEN exists, when .codex/hooks.json
+// is a symlink or when ak-cook is a symlink. Like ak with sibling kits, a second kit leaves an
+// existing planner.md alone but claims it too, and on codex every kit but a lone engineer writes
+// its name into the shared .codex/agents/planner.toml, the last writer winning
+// (bestagentkits/agentkit#2980); engineer keeps writing it once it claimed it. `kit uninstall <kit>` deletes every file the kit claims, shared
+// ones included (bestagentkits/agentkit#2981), and its adapter records.
 // `changelog` reports 9.9.9-beta.1. `login` records its argv and the names (never the values) of
 // key-like env vars, reads the key from stdin and keeps only its sha256 in $HOME/.ak-login; a key
 // containing "bad" fails like ak, echoing the key to stderr so tests prove acp does not pass it
@@ -57,18 +62,38 @@ if [ "$1" = kit ] && { [ "$2" = init ] || [ "$2" = refresh ]; }; then
   fi
   skills=.agents/skills
   [ "$target" = claude-code ] && skills=.claude/skills
-  if [ -L "$skills/ak-cook" ]; then echo "anchor is not a real directory: $skills/ak-cook" >&2; exit 1; fi
-  mkdir -p "$skills/ak-cook"
-  printf -- '---\nname: ak-cook\n---\n' > "$skills/ak-cook/SKILL.md"
-  owned="\"$(pwd -P)/$skills/ak-cook/SKILL.md\""
+  skill=ak-cook
+  [ "$kit" = engineer ] || skill="$kit-brief"
+  if [ -L "$skills/$skill" ]; then echo "anchor is not a real directory: $skills/$skill" >&2; exit 1; fi
+  mkdir -p "$skills/$skill"
+  printf -- '---\nname: %s\n---\n' "$skill" > "$skills/$skill/SKILL.md"
+  owned="\"$(pwd -P)/$skills/$skill/SKILL.md\""
   if [ "$target" = claude-code ]; then
-    mkdir -p .claude/agents; printf planner > .claude/agents/planner.md
+    mkdir -p .claude/agents
+    if [ "$kit" = engineer ] || [ ! -e .claude/agents/planner.md ]; then printf planner > .claude/agents/planner.md; fi
     owned="$owned, \"$(pwd -P)/.claude/agents/planner.md\""
+  fi
+  meta=".agentkit/adapters/$target/$kit/.agentkit"
+  if [ "$target" = codex ] && { [ "$kit" != engineer ] || [ -e .codex/agents/planner.toml ] ||
+    grep -q planner.toml "$meta/native-skill-paths.json" 2>/dev/null; }; then
+    mkdir -p .codex/agents; printf %s "$kit" > .codex/agents/planner.toml
+    owned="$owned, \"$(pwd -P)/.codex/agents/planner.toml\""
   fi
   meta=".agentkit/adapters/$target/$kit/.agentkit"
   mkdir -p "$meta"
   printf '{"provenance": {"registry_version": "%s"}, "skill_selection": %s}' "$version" "$selection" > "$meta/install-manifest.json"
   printf '[%s]\n' "$owned" > "$meta/native-skill-paths.json"
+  exit 0
+fi
+if [ "$1" = kit ] && [ "$2" = uninstall ]; then
+  kit=$3
+  echo "kit uninstall $kit" >> .ak-calls
+  for meta in .agentkit/adapters/*/"$kit"/.agentkit; do
+    [ -d "$meta" ] || continue
+    for path in $(tr -d '[]" ' < "$meta/native-skill-paths.json" | tr ',' ' '); do rm -f "$path"; done
+    rm -rf "${meta%/.agentkit}"
+  done
+  rm -rf ".claude/skills/$kit-brief" ".agents/skills/$kit-brief"
   exit 0
 fi
 if [ "$1" = changelog ]; then
