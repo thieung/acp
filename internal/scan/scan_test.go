@@ -134,6 +134,38 @@ func TestScanReportsExactlyTheProblemsPresent(t *testing.T) {
 	}
 }
 
+// The version still matches after a sibling kit's uninstall deletes files this kit recorded, so
+// only the ownership index shows the damage.
+func TestScanFindsMissingKitFiles(t *testing.T) {
+	f := synced(t)
+	if err := os.Remove(filepath.Join(f.Repo, ".claude/agents/planner.md")); err != nil {
+		t.Fatal(err)
+	}
+	r := run(t, f, Options{Module: "projects"})
+	var found *Finding
+	for i, fd := range r.Findings {
+		if fd.Code == "kit_files_missing" {
+			found = &r.Findings[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("codes %v", codes(r))
+	}
+	if found.Severity != Warn || found.Subject != "demo claude-code" || found.Params["kit"] != "engineer" ||
+		found.Params["count"] != "1" || found.Params["example"] != ".claude/agents/planner.md" ||
+		!strings.Contains(found.Raw, ".claude/agents/planner.md") {
+		t.Fatalf("finding %+v", found)
+	}
+	if found.Fix == nil || found.Fix.Command() != "acp sync demo" {
+		t.Fatalf("fix %+v", found.Fix)
+	}
+	for _, fd := range r.Findings {
+		if fd.Code == "kit_outdated" || fd.Code == "selection_drift" {
+			t.Fatalf("a missing file is not a version or selection problem: %+v", fd)
+		}
+	}
+}
+
 func TestScanFindsUntrackedLinksAndOldCopies(t *testing.T) {
 	f := synced(t)
 	// An acp link git shows as untracked: the worktree's exclude file was removed.
@@ -434,5 +466,31 @@ func TestScanReportsDeclaredPluginsLikeThePythonAcp(t *testing.T) {
 	// Scan never runs claude: the fake CLI records every call it gets.
 	if calls := f.Read(filepath.Join(f.Home, ".fake-claude-calls")); calls != "" {
 		t.Fatalf("scan ran claude: %s", calls)
+	}
+}
+
+// A link an older acp made to the main checkout's agent memory shows in git status; the fix scan
+// offers (acp link) removes it, so the finding goes away.
+func TestScanFixDropsOldStateLinks(t *testing.T) {
+	f := synced(t)
+	f.Write(filepath.Join(f.Repo, ".claude/agent-memory/m.md"), "main's")
+	f.Symlink(filepath.Join(f.Repo, ".claude/agent-memory"), filepath.Join(f.WT, ".claude/agent-memory"))
+	r := run(t, f, Options{})
+	var fix *Fix
+	for _, fd := range r.Findings {
+		if fd.Code == "untracked_acp_links" {
+			fix = fd.Fix
+		}
+	}
+	if fix == nil || fix.Kind != "link" {
+		t.Fatalf("codes %v", codes(r))
+	}
+	root := &core.Root{Dir: f.CP}
+	p, _ := root.ByID("demo")
+	if err := core.NewEngine(root).SyncCheckout(p, f.Repo, f.WT, core.NewLog(""), core.LinkOpts{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := codes(run(t, f, Options{})); contains(got, "untracked_acp_links") || contains(got, "worktree_unlinked") {
+		t.Fatalf("after acp link: %v", got)
 	}
 }

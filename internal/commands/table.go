@@ -21,7 +21,7 @@ const overview = `acp: see and sync agent skills across your projects.
   acp hooks [install|uninstall]  link worktrees automatically at session start
   acp doctor               like status, but exits 1 when anything needs a sync
   acp skills list|set ID   show or change a project's skills (set previews until --apply)
-  acp kit add ID           give a project AgentKit (previews until --apply)
+  acp kit add|remove ID    give a project AgentKit, add or remove another kit (previews until --apply)
   acp setup [install-ak|login|link-cli|install-clt]  ak CLI, sign-in, terminal acp, Apple's tools
   acp connect              register acp mcp with Claude Code and Codex (previews until --apply)
   acp init                 create or adopt a control plane (no personal skills)
@@ -110,8 +110,8 @@ func init() {
 				{name: "remove", kind: strFlag, help: "comma-separated skill names"},
 				{name: "runtimes", kind: strFlag, help: "personal skills only: claude,codex (default: the project's targets)"},
 				apply, noFix}, run: cmdSkills},
-		{name: "kit", help: "give a project AgentKit", action: true,
-			pos:   []posSpec{{name: "action", choices: []string{"add"}}, {name: "id", help: "project id"}},
+		{name: "kit", help: "give a project AgentKit, or add or remove another kit", action: true,
+			pos:   []posSpec{{name: "action", choices: []string{"add", "remove"}}, {name: "id", help: "project id"}},
 			flags: []flagSpec{kitFlag, channel, targets, apply, noFix}, run: cmdKit},
 		{name: "setup", help: "check, install or sign in to the ak CLI", action: true,
 			pos: []posSpec{{name: "action", optional: true, def: "check", choices: []string{"check", "install-ak", "login", "link-cli", "install-clt"}}},

@@ -211,29 +211,49 @@ func projectChecks(ctx context.Context, c *collector, p *core.Project) {
 	}
 	main := resolve(p.Repo)
 	eng := core.NewEngine(c.root)
-	if p.AK() != nil {
-		kit, channel := p.Kit(), p.Channel()
-		if pin := c.root.PinnedVersion(channel, kit); pin != "" {
-			for _, target := range p.AKTargets() {
-				if _, ok := core.Targets[target]; !ok {
-					continue
+	kits := p.Kits()
+	for _, k := range kits {
+		kit := k.Name
+		pin := c.root.PinnedVersion(p.Channel(), kit)
+		if pin == "" {
+			continue
+		}
+		for _, target := range p.AKTargets() {
+			if _, ok := core.Targets[target]; !ok {
+				continue
+			}
+			recorded := core.InstallManifest(main, target, kit)
+			have := core.InstalledVersion(recorded)
+			params := map[string]string{"project": p.ID, "target": target, "kit": kit, "pin": pin, "installed": have}
+			subject := p.ID + " " + target
+			if !k.Primary {
+				// The primary kit keeps the subject it had before projects could use several kits.
+				subject += " " + kit
+			}
+			fix := &Fix{Kind: "sync", Args: []string{p.ID}, Safety: "safe"}
+			switch {
+			case recorded.Len() == 0:
+				c.add("kit_not_installed", Warn, "projects", subject, params, "", fix)
+			case have != pin || len(eng.StoreLinks(main, core.Targets[target])) > 0:
+				if have == "" {
+					params["installed"] = "2.x"
 				}
-				recorded := core.InstallManifest(main, target, kit)
-				have := core.InstalledVersion(recorded)
-				params := map[string]string{"project": p.ID, "target": target, "pin": pin, "installed": have}
-				subject := p.ID + " " + target
-				fix := &Fix{Kind: "sync", Args: []string{p.ID}, Safety: "safe"}
-				switch {
-				case recorded.Len() == 0:
-					c.add("kit_not_installed", Warn, "projects", subject, params, "", fix)
-				case have != pin || len(eng.StoreLinks(main, core.Targets[target])) > 0:
-					if have == "" {
-						params["installed"] = "2.x"
-					}
-					c.add("kit_outdated", Warn, "projects", subject, params, "", fix)
-				case !eng.SelectionMatches(p, recorded):
-					c.add("selection_drift", Warn, "projects", subject, params, "", fix)
+				c.add("kit_outdated", Warn, "projects", subject, params, "", fix)
+			case !eng.SelectionMatches(k, recorded):
+				c.add("selection_drift", Warn, "projects", subject, params, "", fix)
+			}
+			if have == "" {
+				continue
+			}
+			if missing := core.MissingKitFiles(main, target, kit); len(missing) > 0 {
+				shown := missing
+				if len(shown) > 5 {
+					shown = shown[:5]
 				}
+				c.add("kit_files_missing", Warn, "projects", subject, map[string]string{
+					"project": p.ID, "target": target, "kit": kit, "count": fmt.Sprint(len(missing)),
+					"example": missing[0],
+				}, "missing: "+strings.Join(shown, ", "), fix)
 			}
 		}
 	}
@@ -431,17 +451,16 @@ func agentkitChecks(ctx context.Context, c *collector) {
 	}
 	pins := map[string]bool{}
 	for _, p := range fleet {
-		if p.AK() == nil {
-			continue
-		}
-		key := p.Channel() + "/" + p.Kit()
-		if pins[key] {
-			continue
-		}
-		pins[key] = true
-		if c.root.PinnedVersion(p.Channel(), p.Kit()) == "" {
-			c.add("pin_missing", Error, "agentkit", key, map[string]string{"channel": p.Channel(), "kit": p.Kit()}, "",
-				&Fix{Kind: "upgrade", Args: []string{"--channel", p.Channel(), "--kit", p.Kit()}, Safety: "confirm"})
+		for _, k := range p.Kits() {
+			key := p.Channel() + "/" + k.Name
+			if pins[key] {
+				continue
+			}
+			pins[key] = true
+			if c.root.PinnedVersion(p.Channel(), k.Name) == "" {
+				c.add("pin_missing", Error, "agentkit", key, map[string]string{"channel": p.Channel(), "kit": k.Name}, "",
+					&Fix{Kind: "upgrade", Args: []string{"--channel", p.Channel(), "--kit", k.Name}, Safety: "confirm"})
+			}
 		}
 	}
 	if len(pins) == 0 {

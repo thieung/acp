@@ -92,6 +92,70 @@ func TestNativeUpgradePaths(t *testing.T) {
 	}
 }
 
+func gone(p string) bool {
+	_, err := os.Lstat(p)
+	return os.IsNotExist(err)
+}
+
+// Uninstalling a sibling kit can delete files the kit still records while its version stays
+// right; sync must notice and refresh at the same version, which writes them back.
+func TestNativeRefreshesWhenRecordedFilesAreMissing(t *testing.T) {
+	f := newFixture(t)
+	if s := issues(f.syncProject(SyncOpts{Native: true})); s != "" {
+		t.Fatal(s)
+	}
+	agent := filepath.Join(f.repo, ".claude/agents/planner.md")
+	if err := os.Remove(agent); err != nil {
+		t.Fatal(err)
+	}
+	if got := MissingKitFiles(f.repo, "claude-code", "engineer"); strings.Join(got, ",") != ".claude/agents/planner.md" {
+		t.Fatalf("missing %v", got)
+	}
+	dry := f.syncProject(SyncOpts{Native: true, Dry: true})
+	if s := lines(dry[0]); !strings.Contains(s, "~ AgentKit engineer claude-code") ||
+		!strings.Contains(s, "1 recorded file(s) missing") || strings.Contains(s, "codex") {
+		t.Fatalf("dry run: %s", s)
+	}
+	if !gone(agent) || len(f.akCalls()) != 2 {
+		t.Fatalf("the dry run changed something: %v", f.akCalls())
+	}
+	if s := issues(f.syncProject(SyncOpts{Native: true})); s != "" {
+		t.Fatal(s)
+	}
+	if got := strings.Join(f.akCalls()[2:], ","); got != "kit refresh engineer" {
+		t.Fatalf("ak calls after the files went missing: %s", got)
+	}
+	if gone(agent) {
+		t.Fatal("the refresh did not write the file back")
+	}
+	if again := f.syncProject(SyncOpts{Native: true}); !allClean(again) {
+		t.Fatalf("third sync: %s", lines(again[0]))
+	}
+}
+
+func TestMissingKitFilesJudgesOnlyThisCheckout(t *testing.T) {
+	f := newFixture(t)
+	meta := filepath.Join(f.repo, ".agentkit/adapters/codex/engineer/.agentkit/native-skill-paths.json")
+	if got := MissingKitFiles(f.repo, "codex", "engineer"); got != nil {
+		t.Fatalf("no index: %v", got)
+	}
+	f.write(filepath.Join(f.repo, ".codex/agents/kept.toml"), "x")
+	f.symlink(filepath.Join(f.base, "nowhere"), filepath.Join(f.repo, ".codex/agents/dangling.toml"))
+	// Present, gone, a dangling link (still there), relative and gone, outside the checkout, the
+	// checkout itself.
+	f.write(meta, `["`+filepath.Join(f.repo, ".codex/agents/kept.toml")+`", "`+
+		filepath.Join(f.repo, ".codex/agents/gone.toml")+`", "`+
+		filepath.Join(f.repo, ".codex/agents/dangling.toml")+`", ".agents/skills/ak-x/SKILL.md", "`+
+		filepath.Join(f.base, "moved/.codex/agents/old.toml")+`", "`+f.repo+`"]`)
+	if got := strings.Join(MissingKitFiles(f.repo, "codex", "engineer"), ","); got != ".agents/skills/ak-x/SKILL.md,.codex/agents/gone.toml" {
+		t.Fatalf("missing %q", got)
+	}
+	f.write(meta, `{"not": "a list"}`)
+	if got := MissingKitFiles(f.repo, "codex", "engineer"); got != nil {
+		t.Fatalf("malformed index: %v", got)
+	}
+}
+
 func TestNativeDropsBrokenLegacyHooksLink(t *testing.T) {
 	f := newFixture(t)
 	f.symlink(filepath.Join(f.repo, "engineer/.codex/hooks.json"), filepath.Join(f.repo, ".codex/hooks.json"))
@@ -204,7 +268,7 @@ func TestSelectionMatches(t *testing.T) {
 	for _, c := range cases {
 		ak, _ := ParseJSON([]byte(c.ak))
 		p := &Project{ID: "x", Manifest: Obj("agentkit", ak)}
-		if got := e.SelectionMatches(p, c.recorded); got != c.want {
+		if got := e.SelectionMatches(p.Kits()[0], c.recorded); got != c.want {
 			t.Errorf("%s vs %v: got %v", c.ak, c.recorded, got)
 		}
 	}

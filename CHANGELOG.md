@@ -8,6 +8,34 @@
   `plugin_runtime_unsupported` match the Python acp's `status` and `sync --dry-run`; each names
   the `claude plugin ...` command to run. Scan only reads `installed_plugins.json` and the two
   `settings.json` files.
+- A project can use several AgentKit kits. `acp kit add <id> --kit NAME` adds a kit to
+  `agentkit.extra_kits` next to the primary kit, sharing its channel and targets, and
+  `acp kit remove <id> --kit NAME` uninstalls it. `acp sync` installs the primary kit first on
+  each target and, on Codex, refreshes it again after another kit ran so its shared agents win
+  ([bestagentkits/agentkit#2980](https://github.com/bestagentkits/agentkit/issues/2980)); after
+  an uninstall it refreshes the primary kit, which writes back the shared files the uninstall
+  deleted ([bestagentkits/agentkit#2981](https://github.com/bestagentkits/agentkit/issues/2981)).
+  `acp status`, `acp skills list|set`, `acp scan`, `acp upgrade` and the dashboard cover every
+  kit; status and skills list put added kits under `agentkit.extra_kits`.
+- acp now notices AgentKit files that went missing while the installed version still matches,
+  for example after uninstalling a sibling kit that shared them
+  ([bestagentkits/agentkit#2981](https://github.com/bestagentkits/agentkit/issues/2981)). It
+  reads the files each target's install recorded in
+  `.agentkit/adapters/<target>/<kit>/.agentkit/native-skill-paths.json` and judges only the ones
+  inside the checkout:
+  - `acp scan` reports the new code `kit_files_missing`, with `acp sync` as the fix.
+  - `acp status` adds `files_missing` to each target and marks the target not ok, so
+    `acp doctor` exits 1.
+  - `acp sync` runs `ak kit refresh` at the same version, which writes the files back.
+- `acp link` (and so `acp sync` and the worktree hook) removes links an older acp made in
+  worktrees to the main checkout's per-checkout state, such as `.claude/agent-memory`, hook logs
+  and runtime files. acp stopped mirroring these, but left the old links, so `git status` kept
+  listing them and the `untracked_acp_links` fix that `acp scan` offered changed nothing. Only a
+  link to the same path in the main checkout is removed; the data stays in the main checkout.
+- `acp init` no longer records the control plane when `ACP_ROOT` is set. The variable already
+  wins over the record, and a one-shell override such as a throwaway control plane moved the
+  root that other shells, the app and the hooks use. `acp init --root <dir>` without `ACP_ROOT`
+  records it.
 - New `acp new <path>`: create a folder (or git init an existing one, or take an existing repo),
   add it to the fleet, install AgentKit for `--runtimes` (default `claude`) and link personal
   skills from `project-defaults.json` plus `--skills`. When acp ran `git init`, the paths it and

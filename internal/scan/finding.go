@@ -24,7 +24,8 @@ var Modules = []string{"projects", "agentkit", "hooks"}
 
 // Codes is every finding code scan can emit; explain's catalog must cover each one.
 var Codes = []string{
-	"repo_missing", "kit_not_installed", "kit_outdated", "selection_drift", "personal_skill_missing",
+	"repo_missing", "kit_not_installed", "kit_outdated", "selection_drift", "kit_files_missing",
+	"personal_skill_missing",
 	"personal_link_missing", "real_dir_blocks_link", "foreign_link", "worktree_unlinked",
 	"old_copy_shadows_main", "tracked_agent_files_changed", "untracked_acp_links", "exclude_conflict",
 	"project_not_tracked",

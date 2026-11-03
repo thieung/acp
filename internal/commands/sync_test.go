@@ -130,12 +130,13 @@ func TestStatusJSONFields(t *testing.T) {
 	}
 	ak := p["agentkit"].(map[string]any)
 	target := ak["targets"].([]any)[0].(map[string]any)
-	for _, k := range []string{"target", "installed", "ok", "selection_ok", "skills", "stale", "agents", "hooks"} {
+	for _, k := range []string{"target", "installed", "ok", "selection_ok", "files_missing", "skills", "stale", "agents", "hooks"} {
 		if _, ok := target[k]; !ok {
 			t.Errorf("target is missing %q", k)
 		}
 	}
-	if p["healthy"] != true || target["installed"] != "3.0.0-beta.36" || target["agents"].(float64) != 1 {
+	if p["healthy"] != true || target["installed"] != "3.0.0-beta.36" || target["agents"].(float64) != 1 ||
+		target["files_missing"].(float64) != 0 {
 		t.Fatalf("project %v", p)
 	}
 	personal := p["personal"].(map[string]any)
