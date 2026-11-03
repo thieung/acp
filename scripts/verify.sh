@@ -8,6 +8,12 @@
 # file; the first failure prints the end of its log, keeps the copy for a look and exits 1.
 set -eu
 
+# Git runs hooks with GIT_DIR and its siblings pointing at the repo being pushed. Left set, every
+# git command the tests run in their throwaway fixtures acts on this repo instead: a pre-push run
+# once set core.bare, added a branch and a worktree and moved HEAD. Drop them all; git finds the
+# repo from $root by itself.
+unset $(git rev-parse --local-env-vars 2>/dev/null) 2>/dev/null || true
+
 usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit "${1:-2}"; }
 rev=
 linux=1

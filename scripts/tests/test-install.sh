@@ -72,7 +72,8 @@ rm "$work/bin/acp"
 
 mkdir -p "$work/bad"
 cp "$dist"/*.tar.gz "$work/bad/"
-sed 's/^[0-9a-f]/0/' "$dist/checksums.txt" >"$work/bad/checksums.txt"
+# Change each line's first hex digit for real: 0 becomes 1, anything else 0.
+sed -e 's/^0/1/' -e t -e 's/^[0-9a-f]/0/' "$dist/checksums.txt" >"$work/bad/checksums.txt"
 install_acp "file://$work/bad" && fail "installed with a bad checksum"
 grep -q 'checksum mismatch' "$work/out" || fail "bad checksum message: $(cat "$work/out")"
 [ ! -e "$work/bin/acp" ] || fail "bad checksum left a binary"
