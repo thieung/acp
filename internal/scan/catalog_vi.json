@@ -40,6 +40,18 @@
         "skill"
       ]
     },
+    "kit_files_missing": {
+      "title": "AgentKit {kit} của {project} ({target}) thiếu {count} tệp",
+      "what": "AgentKit đã ghi nhận các tệp này là của {kit}, nhưng {count} tệp không còn trong dự án, ví dụ {example}. Phiên bản vẫn đúng nên nhìn số phiên bản thì không thấy.",
+      "why": "Skill, agent hoặc hook thiếu tệp sẽ không chạy, hoặc trợ lý gọi tới một thứ không còn. Chuyện này hay xảy ra sau khi gỡ một kit khác đang dùng chung tệp.",
+      "ignore": "Những phần thiếu tệp vẫn hỏng cho tới khi AgentKit ghi lại chúng.",
+      "todo": "Chạy acp sync {project}: acp sẽ làm mới AgentKit {kit} ở cùng phiên bản để ghi lại các tệp thiếu.",
+      "glossary": [
+        "AgentKit",
+        "skill",
+        "hook"
+      ]
+    },
     "personal_skill_missing": {
       "title": "Không tìm thấy skill cá nhân {skill}",
       "what": "Dự án {project} dùng skill {skill}, nhưng trong thư mục skills/ của control plane không có skill này.",

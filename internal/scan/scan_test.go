@@ -134,6 +134,38 @@ func TestScanReportsExactlyTheProblemsPresent(t *testing.T) {
 	}
 }
 
+// The version still matches after a sibling kit's uninstall deletes files this kit recorded, so
+// only the ownership index shows the damage.
+func TestScanFindsMissingKitFiles(t *testing.T) {
+	f := synced(t)
+	if err := os.Remove(filepath.Join(f.Repo, ".claude/agents/planner.md")); err != nil {
+		t.Fatal(err)
+	}
+	r := run(t, f, Options{Module: "projects"})
+	var found *Finding
+	for i, fd := range r.Findings {
+		if fd.Code == "kit_files_missing" {
+			found = &r.Findings[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("codes %v", codes(r))
+	}
+	if found.Severity != Warn || found.Subject != "demo claude-code" || found.Params["kit"] != "engineer" ||
+		found.Params["count"] != "1" || found.Params["example"] != ".claude/agents/planner.md" ||
+		!strings.Contains(found.Raw, ".claude/agents/planner.md") {
+		t.Fatalf("finding %+v", found)
+	}
+	if found.Fix == nil || found.Fix.Command() != "acp sync demo" {
+		t.Fatalf("fix %+v", found.Fix)
+	}
+	for _, fd := range r.Findings {
+		if fd.Code == "kit_outdated" || fd.Code == "selection_drift" {
+			t.Fatalf("a missing file is not a version or selection problem: %+v", fd)
+		}
+	}
+}
+
 func TestScanFindsUntrackedLinksAndOldCopies(t *testing.T) {
 	f := synced(t)
 	// An acp link git shows as untracked: the worktree's exclude file was removed.

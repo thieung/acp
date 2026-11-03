@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- acp now notices AgentKit files that went missing while the installed version still matches,
+  for example after uninstalling a sibling kit that shared them
+  ([bestagentkits/agentkit#2981](https://github.com/bestagentkits/agentkit/issues/2981)). It
+  reads the files each target's install recorded in
+  `.agentkit/adapters/<target>/<kit>/.agentkit/native-skill-paths.json` and judges only the ones
+  inside the checkout:
+  - `acp scan` reports the new code `kit_files_missing`, with `acp sync` as the fix.
+  - `acp status` adds `files_missing` to each target and marks the target not ok, so
+    `acp doctor` exits 1.
+  - `acp sync` runs `ak kit refresh` at the same version, which writes the files back.
 - `acp link` (and so `acp sync` and the worktree hook) removes links an older acp made in
   worktrees to the main checkout's per-checkout state, such as `.claude/agent-memory`, hook logs
   and runtime files. acp stopped mirroring these, but left the old links, so `git status` kept

@@ -12,7 +12,8 @@ import (
 )
 
 // FakeAK stands in for the AgentKit CLI. `kit init|refresh` records the call in .ak-calls, writes
-// ak-cook (and .claude/agents for claude-code) and an install manifest; it fails like ak when
+// ak-cook (and .claude/agents for claude-code), an install manifest and, like ak, the absolute
+// paths of the files it wrote in native-skill-paths.json; it fails like ak when
 // .agentkit/BROKEN exists, when .codex/hooks.json is a symlink or when ak-cook is a symlink.
 // `changelog` reports 9.9.9-beta.1. `login` records its argv and the names (never the values) of
 // key-like env vars, reads the key from stdin and keeps only its sha256 in $HOME/.ak-login; a key
@@ -59,10 +60,15 @@ if [ "$1" = kit ] && { [ "$2" = init ] || [ "$2" = refresh ]; }; then
   if [ -L "$skills/ak-cook" ]; then echo "anchor is not a real directory: $skills/ak-cook" >&2; exit 1; fi
   mkdir -p "$skills/ak-cook"
   printf -- '---\nname: ak-cook\n---\n' > "$skills/ak-cook/SKILL.md"
-  if [ "$target" = claude-code ]; then mkdir -p .claude/agents; printf planner > .claude/agents/planner.md; fi
+  owned="\"$(pwd -P)/$skills/ak-cook/SKILL.md\""
+  if [ "$target" = claude-code ]; then
+    mkdir -p .claude/agents; printf planner > .claude/agents/planner.md
+    owned="$owned, \"$(pwd -P)/.claude/agents/planner.md\""
+  fi
   meta=".agentkit/adapters/$target/$kit/.agentkit"
   mkdir -p "$meta"
   printf '{"provenance": {"registry_version": "%s"}, "skill_selection": %s}' "$version" "$selection" > "$meta/install-manifest.json"
+  printf '[%s]\n' "$owned" > "$meta/native-skill-paths.json"
   exit 0
 fi
 if [ "$1" = changelog ]; then
