@@ -2,8 +2,10 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,6 +66,45 @@ func InstallManifest(checkout, target, kit string) *Object {
 }
 
 func InstalledVersion(m *Object) string { return m.Object("provenance").String("registry_version") }
+
+// MissingKitFiles lists, relative to checkout and sorted, the files one target's install of kit
+// recorded in AgentKit's ownership index (native-skill-paths.json) that are gone from disk. The
+// install manifest's version still matches then: uninstalling a sibling kit can delete files this
+// kit owns (bestagentkits/agentkit#2981). Paths recorded outside the checkout, as after the repo
+// moved, are not judged, and a missing or unreadable index lists nothing.
+func MissingKitFiles(checkout, target, kit string) []string {
+	data, err := os.ReadFile(filepath.Join(checkout, ".agentkit", "adapters", target, kit, ".agentkit", "native-skill-paths.json"))
+	if err != nil {
+		return nil
+	}
+	var recorded []string
+	if json.Unmarshal(data, &recorded) != nil {
+		return nil
+	}
+	roots := []string{filepath.Clean(checkout)}
+	if real, err := filepath.EvalSymlinks(checkout); err == nil && real != roots[0] {
+		roots = append(roots, real)
+	}
+	var out []string
+	for _, p := range recorded {
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(checkout, p)
+		}
+		p = filepath.Clean(p)
+		for _, root := range roots {
+			if p == root || !Within(p, root) {
+				continue
+			}
+			if _, err := os.Lstat(p); errors.Is(err, fs.ErrNotExist) {
+				rel, _ := filepath.Rel(root, p)
+				out = append(out, filepath.ToSlash(rel))
+			}
+			break
+		}
+	}
+	sort.Strings(out)
+	return out
+}
 
 // KitCatalog is every skill of a kit, as recorded by the installs across the fleet.
 func (e *Engine) KitCatalog(kit string) []string {
@@ -183,13 +224,21 @@ func (e *Engine) SyncNative(ctx context.Context, p *Project, main string, log *L
 		have := InstalledVersion(recorded)
 		stale := e.StoreLinks(main, runtime)
 		same := e.SelectionMatches(p, recorded)
-		if have == pin && same && len(stale) == 0 {
+		var missing []string
+		if have != "" {
+			missing = MissingKitFiles(main, target, kit)
+		}
+		if have == pin && same && len(stale) == 0 && len(missing) == 0 {
 			log.Ok("AgentKit %s %s (%s)", kit, pin, target)
 			continue
 		}
 		why := ""
 		if !same && recorded.Len() > 0 {
 			why = ", new skill selection"
+		}
+		if len(missing) > 0 {
+			// A refresh at the same version writes them back.
+			why += fmt.Sprintf(", %d recorded file(s) missing", len(missing))
 		}
 		label := have
 		if label == "" {

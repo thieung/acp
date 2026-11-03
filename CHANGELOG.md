@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- acp now notices AgentKit files that went missing while the installed version still matches,
+  for example after uninstalling a sibling kit that shared them
+  ([bestagentkits/agentkit#2981](https://github.com/bestagentkits/agentkit/issues/2981)). It
+  reads the files each target's install recorded in
+  `.agentkit/adapters/<target>/<kit>/.agentkit/native-skill-paths.json` and judges only the ones
+  inside the checkout:
+  - `acp scan` reports the new code `kit_files_missing`, with `acp sync` as the fix.
+  - `acp status` adds `files_missing` to each target and marks the target not ok, so
+    `acp doctor` exits 1.
+  - `acp sync` runs `ak kit refresh` at the same version, which writes the files back.
 - New `acp new <path>`: create a folder (or git init an existing one, or take an existing repo),
   add it to the fleet, install AgentKit for `--runtimes` (default `claude`) and link personal
   skills from `project-defaults.json` plus `--skills`. When acp ran `git init`, the paths it and

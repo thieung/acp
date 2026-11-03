@@ -115,8 +115,10 @@ func (e *Engine) ProjectStatus(p *Project) *Object {
 				have = "2.x"
 			}
 			same := e.SelectionMatches(p, recorded)
-			ok := have == any(pin) && pin != "" && same && len(e.StoreLinks(main, Targets[target])) == 0
-			t := Obj("target", target, "installed", have, "ok", ok, "selection_ok", same)
+			missing := MissingKitFiles(main, target, kit)
+			ok := have == any(pin) && pin != "" && same && len(e.StoreLinks(main, Targets[target])) == 0 &&
+				len(missing) == 0
+			t := Obj("target", target, "installed", have, "ok", ok, "selection_ok", same, "files_missing", len(missing))
 			counts := e.NativeCounts(main, target, recorded)
 			for _, k := range counts.Keys() {
 				v, _ := counts.Get(k)
@@ -131,6 +133,9 @@ func (e *Engine) ProjectStatus(p *Project) *Object {
 				note := fmt.Sprintf("%s: %s, pinned %s", target, shown, pinOrNone(pin))
 				if !same && recorded.Len() > 0 {
 					note += ", selection differs"
+				}
+				if len(missing) > 0 {
+					note += fmt.Sprintf(", %d recorded file(s) missing", len(missing))
 				}
 				notes = append(notes, note)
 			}

@@ -234,6 +234,19 @@ func projectChecks(ctx context.Context, c *collector, p *core.Project) {
 				case !eng.SelectionMatches(p, recorded):
 					c.add("selection_drift", Warn, "projects", subject, params, "", fix)
 				}
+				if have == "" {
+					continue
+				}
+				if missing := core.MissingKitFiles(main, target, kit); len(missing) > 0 {
+					shown := missing
+					if len(shown) > 5 {
+						shown = shown[:5]
+					}
+					c.add("kit_files_missing", Warn, "projects", subject, map[string]string{
+						"project": p.ID, "target": target, "kit": kit, "count": fmt.Sprint(len(missing)),
+						"example": missing[0],
+					}, "missing: "+strings.Join(shown, ", "), fix)
+				}
 			}
 		}
 	}
