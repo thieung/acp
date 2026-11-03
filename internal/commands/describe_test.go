@@ -36,7 +36,7 @@ func TestDescribeContract(t *testing.T) {
 		}
 	}
 	for _, want := range []string{"status", "doctor", "sync", "link", "unlink", "upgrade", "add", "remove",
-		"activity", "global", "hooks", "skills list", "skills set", "kit add", "setup", "setup install-ak",
+		"activity", "global", "hooks", "skills list", "skills set", "kit add", "kit remove", "setup", "setup install-ak",
 		"setup login", "setup link-cli", "setup install-clt", "connect", "describe", "web", "init", "scan", "explain", "mcp"} {
 		if !names[want] {
 			t.Errorf("describe is missing %q", want)

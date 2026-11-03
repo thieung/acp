@@ -49,18 +49,22 @@ func names(value string) ([]string, error) {
 	return out, nil
 }
 
-// skillKind says whether a name is an AgentKit skill of the project's kit or a personal skill.
-func skillKind(eng *core.Engine, root *core.Root, p *core.Project, name string) (string, error) {
-	if p.AK() != nil && contains(eng.KitCatalog(p.Kit()), name) {
-		return "agentkit", nil
+// skillKind says whether a name is an AgentKit skill of one of the project's kits (kit names it)
+// or a personal skill. A kit catalog is checked first, in the project's kit order; an unknown
+// "ak-" name belongs to the primary kit.
+func skillKind(eng *core.Engine, root *core.Root, p *core.Project, name string) (kind, kit string, err error) {
+	for _, k := range p.Kits() {
+		if contains(eng.KitCatalog(k.Name), name) {
+			return "agentkit", k.Name, nil
+		}
 	}
 	if contains(personalCatalog(root), name) {
-		return "personal", nil
+		return "personal", "", nil
 	}
 	if strings.HasPrefix(name, "ak-") && p.AK() != nil {
-		return "agentkit", nil
+		return "agentkit", p.Kit(), nil
 	}
-	return "", fail("unknown skill '%s' (not in the kit catalog or %s)", name, root.Skills())
+	return "", "", fail("unknown skill '%s' (not in a kit catalog or %s)", name, root.Skills())
 }
 
 func without(list []string, name string) []string {
@@ -76,7 +80,11 @@ func without(list []string, name string) []string {
 // editSkills returns a copy of the manifest with skills added and removed; nothing is written.
 func editSkills(eng *core.Engine, root *core.Root, p *core.Project, add, remove, runtimes []string) (*core.Object, error) {
 	manifest := core.Clone(p.Manifest).(*core.Object)
-	ak := manifest.Object("agentkit")
+	// Kit entries of the copy, so edits land in it and not in p.Manifest.
+	entries := map[string]*core.Object{}
+	for _, k := range (&core.Project{ID: p.ID, Manifest: manifest}).Kits() {
+		entries[k.Name] = k.Entry
+	}
 	if !manifest.Has("skills") {
 		manifest.Set("skills", []any{})
 	}
@@ -92,11 +100,12 @@ func editSkills(eng *core.Engine, root *core.Root, p *core.Project, add, remove,
 		edits = append(edits, edit{n, false})
 	}
 	for _, ed := range edits {
-		kind, err := skillKind(eng, root, p, ed.name)
+		kind, kit, err := skillKind(eng, root, p, ed.name)
 		if err != nil {
 			return nil, err
 		}
 		if kind == "agentkit" {
+			ak := entries[kit]
 			exclude := without(ak.Strings("exclude"), ed.name)
 			v, _ := ak.Get("skills")
 			if s, ok := v.(string); ok && s == "all" || v == nil {
@@ -176,6 +185,12 @@ func jsonLines(v any) []string {
 // applyManifest previews a manifest change (diff plus a dry-run sync plan) or, with --apply,
 // writes it and syncs the project.
 func applyManifest(e *Env, root *core.Root, p *core.Project, manifest *core.Object, apply bool) (int, error) {
+	return applyManifestWith(e, root, p, manifest, apply, nil)
+}
+
+// applyManifestWith is applyManifest that also uninstalls the kits the change drops, before the
+// sync (core.SyncOpts.RemoveKits).
+func applyManifestWith(e *Env, root *core.Root, p *core.Project, manifest *core.Object, apply bool, removeKits []string) (int, error) {
 	rel := "projects/" + filepath.Base(p.File)
 	if p.File == "" {
 		rel = "projects/" + p.ID + ".json"
@@ -199,7 +214,8 @@ func applyManifest(e *Env, root *core.Root, p *core.Project, manifest *core.Obje
 	}
 	planned := &core.Project{ID: p.ID, Manifest: manifest, Repo: p.Repo, File: p.File}
 	if !apply {
-		logs := core.NewEngine(root).SyncProject(context.Background(), planned, core.SyncOpts{Dry: true, Native: true})
+		logs := core.NewEngine(root).SyncProject(context.Background(), planned,
+			core.SyncOpts{Dry: true, Native: true, RemoveKits: removeKits})
 		printLogs(e, logs)
 		plan := []any{}
 		for _, l := range logs {
@@ -218,7 +234,7 @@ func applyManifest(e *Env, root *core.Root, p *core.Project, manifest *core.Obje
 	if err != nil {
 		return 0, err
 	}
-	failed := syncProjects(e, root, []*core.Project{planned}, core.SyncOpts{Native: true})
+	failed := syncProjects(e, root, []*core.Project{planned}, core.SyncOpts{Native: true, RemoveKits: removeKits})
 	e.Set("applied", true)
 	e.Set("healthy", !failed)
 	if failed {
@@ -282,29 +298,40 @@ func cmdSkills(e *Env, a *Args) (int, error) {
 	}
 	e.Set("project", p.ID)
 	e.Set("runtimes", defaultRuntimes(p))
-	var agentkit any
-	if p.AK() != nil {
-		catalog := eng.KitCatalog(p.Kit())
-		all, list := p.AKSkills()
-		exclude := p.AKExclude()
-		mode, chosen := "list", list
-		if all {
+	var agentkit *core.Object
+	extras := []any{}
+	for _, k := range p.Kits() {
+		catalog := eng.KitCatalog(k.Name)
+		mode, chosen := "list", k.Skills
+		if k.All {
 			mode, chosen = "all", []string{}
 			for _, s := range catalog {
-				if !contains(exclude, s) {
+				if !contains(k.Exclude, s) {
 					chosen = append(chosen, s)
 				}
 			}
 		}
-		agentkit = core.Obj("kit", p.Kit(), "mode", mode, "exclude", exclude, "selected", nonNilStrings(chosen),
+		o := core.Obj("kit", k.Name, "mode", mode, "exclude", k.Exclude, "selected", nonNilStrings(chosen),
 			"catalog", nonNilStrings(catalog))
-		line := "AgentKit " + p.Kit() + ": " + strconv.Itoa(len(chosen)) + "/" + strconv.Itoa(len(catalog)) + " skills"
-		if len(exclude) > 0 {
-			line += ", excluding " + strings.Join(exclude, ", ")
+		if k.Primary {
+			agentkit = o
+		} else {
+			extras = append(extras, o)
+		}
+		line := "AgentKit " + k.Name + ": " + strconv.Itoa(len(chosen)) + "/" + strconv.Itoa(len(catalog)) + " skills"
+		if len(k.Exclude) > 0 {
+			line += ", excluding " + strings.Join(k.Exclude, ", ")
 		}
 		e.Printf("%s\n", e.Paint("1", line))
 	}
-	e.Set("agentkit", agentkit)
+	if agentkit != nil && len(extras) > 0 {
+		agentkit.Set("extra_kits", extras)
+	}
+	if agentkit != nil {
+		e.Set("agentkit", agentkit)
+	} else {
+		e.Set("agentkit", nil)
+	}
 	e.Set("personal", core.Obj("catalog", personalCatalog(root), "selected", selected))
 	for _, name := range selected.Keys() {
 		e.Printf("  personal %s (%s)\n", name, strings.Join(selected.Strings(name), ", "))
@@ -312,6 +339,9 @@ func cmdSkills(e *Env, a *Args) (int, error) {
 	return 0, nil
 }
 
+// cmdKit gives a project AgentKit (its primary kit), adds another kit to a project that has
+// AgentKit, or removes an added kit. Added kits share the project's channel and targets and go
+// in agentkit.extra_kits; the primary kit is not removed here.
 func cmdKit(e *Env, a *Args) (int, error) {
 	root, err := e.Root()
 	if err != nil {
@@ -321,18 +351,57 @@ func cmdKit(e *Env, a *Args) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if p.AK() != nil {
-		return 0, fail("%s already uses AgentKit %s", p.ID, p.Kit())
-	}
-	targets, err := targetList(a.Str("targets"))
-	if err != nil {
-		return 0, err
-	}
-	if !core.ValidName(a.Str("kit")) {
-		return 0, usageErr("invalid kit name %q", a.Str("kit"))
+	kit := a.Str("kit")
+	if !core.ValidName(kit) {
+		return 0, usageErr("invalid kit name %q", kit)
 	}
 	manifest := core.Clone(p.Manifest).(*core.Object)
-	manifest.Set("agentkit", core.Obj("kit", a.Str("kit"), "channel", a.Str("channel"),
-		"targets", core.AnyList(targets), "skills", "all"))
+	if a.Str("action") == "remove" {
+		if p.AK() == nil {
+			return 0, fail("%s does not use AgentKit", p.ID)
+		}
+		if !a.Given("kit") {
+			return 0, usageErr("pass --kit NAME, the kit to remove")
+		}
+		if kit == p.Kit() {
+			return 0, fail("%s is the primary kit of %s; acp removes only kits added with `acp kit add`", kit, p.ID)
+		}
+		ak := manifest.Object("agentkit")
+		left, found := []any{}, false
+		for _, it := range ak.Array("extra_kits") {
+			if o, ok := it.(*core.Object); ok && o.String("kit") == kit {
+				found = true
+				continue
+			}
+			left = append(left, it)
+		}
+		if !found {
+			return 0, fail("%s does not use AgentKit %s", p.ID, kit)
+		}
+		if len(left) > 0 {
+			ak.Set("extra_kits", left)
+		} else {
+			ak.Delete("extra_kits")
+		}
+		return applyManifestWith(e, root, p, manifest, a.Bool("apply"), []string{kit})
+	}
+	if p.AK() == nil {
+		targets, err := targetList(a.Str("targets"))
+		if err != nil {
+			return 0, err
+		}
+		manifest.Set("agentkit", core.Obj("kit", kit, "channel", a.Str("channel"),
+			"targets", core.AnyList(targets), "skills", "all"))
+		return applyManifest(e, root, p, manifest, a.Bool("apply"))
+	}
+	if !a.Given("kit") || p.UsesKit(kit) {
+		return 0, fail("%s already uses AgentKit %s; pass --kit NAME to add another kit", p.ID, kit)
+	}
+	if a.Given("channel") && a.Str("channel") != p.Channel() || a.Given("targets") {
+		return 0, usageErr("an added kit shares the project's channel (%s) and targets; drop --channel and --targets",
+			p.Channel())
+	}
+	ak := manifest.Object("agentkit")
+	ak.Set("extra_kits", append(ak.Array("extra_kits"), core.Obj("kit", kit, "skills", "all")))
 	return applyManifest(e, root, p, manifest, a.Bool("apply"))
 }

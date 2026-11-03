@@ -98,59 +98,26 @@ func (e *Engine) ProjectStatus(p *Project) *Object {
 		return info
 	}
 	main := resolvePath(p.Repo)
-	if p.AK() != nil {
-		kit, channel := p.Kit(), p.Channel()
-		pin := e.Root.PinnedVersion(channel, kit)
-		targets := []any{}
-		for _, target := range p.AKTargets() {
-			if _, ok := Targets[target]; !ok {
-				notes = append(notes, fmt.Sprintf("! unknown AgentKit target %q", target))
-				continue
-			}
-			recorded := InstallManifest(main, target, kit)
-			var have any
-			if v := InstalledVersion(recorded); v != "" {
-				have = v
-			} else if recorded.Len() > 0 {
-				have = "2.x"
-			}
-			same := e.SelectionMatches(p, recorded)
-			missing := MissingKitFiles(main, target, kit)
-			ok := have == any(pin) && pin != "" && same && len(e.StoreLinks(main, Targets[target])) == 0 &&
-				len(missing) == 0
-			t := Obj("target", target, "installed", have, "ok", ok, "selection_ok", same, "files_missing", len(missing))
-			counts := e.NativeCounts(main, target, recorded)
-			for _, k := range counts.Keys() {
-				v, _ := counts.Get(k)
-				t.Set(k, v)
-			}
-			targets = append(targets, t)
-			if !ok {
-				shown := "not installed"
-				if have != nil {
-					shown = have.(string)
-				}
-				note := fmt.Sprintf("%s: %s, pinned %s", target, shown, pinOrNone(pin))
-				if !same && recorded.Len() > 0 {
-					note += ", selection differs"
-				}
-				if len(missing) > 0 {
-					note += fmt.Sprintf(", %d recorded file(s) missing", len(missing))
-				}
-				notes = append(notes, note)
+	if kits := p.Kits(); kits != nil {
+		channel := p.Channel()
+		for _, bad := range p.BadExtraKits() {
+			notes = append(notes, "! "+bad)
+		}
+		var block *Object
+		extras := []any{}
+		for _, k := range kits {
+			kitInfo, kitNotes := e.kitStatus(p, k, channel, main, len(kits) > 1)
+			notes = append(notes, kitNotes...)
+			if k.Primary {
+				block = kitInfo
+			} else {
+				extras = append(extras, kitInfo)
 			}
 		}
-		all, list := p.AKSkills()
-		var wanted any = "all"
-		if !all {
-			wanted = list
+		if len(extras) > 0 {
+			block.Set("extra_kits", extras)
 		}
-		var pinned any
-		if pin != "" {
-			pinned = pin
-		}
-		info.Set("agentkit", Obj("kit", kit, "channel", channel, "pin", pinned, "skills", wanted,
-			"exclude", p.AKExclude(), "targets", targets))
+		info.Set("agentkit", block)
 	}
 	log := NewLog("")
 	e.SyncCheckout(p, main, main, log, LinkOpts{Dry: true})
@@ -193,4 +160,65 @@ func pinOrNone(pin string) string {
 		return "None"
 	}
 	return pin
+}
+
+// kitStatus is one kit's pin, selection and per-target install state, plus a note for each
+// target that is not at the pin. named prefixes the notes with the kit when a project has several.
+func (e *Engine) kitStatus(p *Project, k KitSpec, channel, main string, named bool) (*Object, []string) {
+	var notes []string
+	pin := e.Root.PinnedVersion(channel, k.Name)
+	targets := []any{}
+	for _, target := range p.AKTargets() {
+		if _, ok := Targets[target]; !ok {
+			if k.Primary {
+				notes = append(notes, fmt.Sprintf("! unknown AgentKit target %q", target))
+			}
+			continue
+		}
+		recorded := InstallManifest(main, target, k.Name)
+		var have any
+		if v := InstalledVersion(recorded); v != "" {
+			have = v
+		} else if recorded.Len() > 0 {
+			have = "2.x"
+		}
+		same := e.SelectionMatches(k, recorded)
+		missing := MissingKitFiles(main, target, k.Name)
+		ok := have == any(pin) && pin != "" && same && len(e.StoreLinks(main, Targets[target])) == 0 &&
+			len(missing) == 0
+		t := Obj("target", target, "installed", have, "ok", ok, "selection_ok", same, "files_missing", len(missing))
+		counts := e.NativeCounts(main, target, recorded)
+		for _, key := range counts.Keys() {
+			v, _ := counts.Get(key)
+			t.Set(key, v)
+		}
+		targets = append(targets, t)
+		if !ok {
+			shown := "not installed"
+			if have != nil {
+				shown = have.(string)
+			}
+			note := fmt.Sprintf("%s: %s, pinned %s", target, shown, pinOrNone(pin))
+			if named {
+				note = k.Name + " " + note
+			}
+			if !same && recorded.Len() > 0 {
+				note += ", selection differs"
+			}
+			if len(missing) > 0 {
+				note += fmt.Sprintf(", %d recorded file(s) missing", len(missing))
+			}
+			notes = append(notes, note)
+		}
+	}
+	var wanted any = "all"
+	if !k.All {
+		wanted = k.Skills
+	}
+	var pinned any
+	if pin != "" {
+		pinned = pin
+	}
+	return Obj("kit", k.Name, "channel", channel, "pin", pinned, "skills", wanted, "exclude", k.Exclude,
+		"targets", targets), notes
 }

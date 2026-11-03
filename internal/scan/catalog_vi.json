@@ -9,8 +9,8 @@
       "glossary": []
     },
     "kit_not_installed": {
-      "title": "AgentKit chưa được cài cho {project} ({target})",
-      "what": "Dự án {project} cần AgentKit bản {pin} cho {target}, nhưng trong dự án chưa có bản nào.",
+      "title": "AgentKit {kit} chưa được cài cho {project} ({target})",
+      "what": "Dự án {project} cần AgentKit {kit} bản {pin} cho {target}, nhưng trong dự án chưa có bản nào.",
       "why": "Thiếu AgentKit thì trợ lý AI trong dự án không có các skill và agent mà bạn đã chọn.",
       "ignore": "Trợ lý vẫn chạy, nhưng thiếu các skill của AgentKit.",
       "todo": "Xem trước bằng lệnh bên dưới, rồi chạy acp sync {project} để cài.",
@@ -20,8 +20,8 @@
       ]
     },
     "kit_outdated": {
-      "title": "AgentKit của {project} ({target}) chưa đúng phiên bản",
-      "what": "Dự án đang có AgentKit {installed}, còn bản được chọn cho cả nhóm dự án là {pin}.",
+      "title": "AgentKit {kit} của {project} ({target}) chưa đúng phiên bản",
+      "what": "Dự án đang có AgentKit {kit} {installed}, còn bản được chọn cho cả nhóm dự án là {pin}.",
       "why": "Các dự án dùng bản khác nhau thì skill có thể chạy khác nhau, khó biết lỗi đến từ đâu.",
       "ignore": "Dự án vẫn dùng được bản cũ, nhưng sẽ lệch dần so với các dự án khác.",
       "todo": "Chạy acp sync {project} để chuyển sang bản {pin}.",
@@ -30,7 +30,7 @@
       ]
     },
     "selection_drift": {
-      "title": "Danh sách skill AgentKit của {project} ({target}) chưa khớp",
+      "title": "Danh sách skill AgentKit {kit} của {project} ({target}) chưa khớp",
       "what": "Bạn đã đổi danh sách skill AgentKit của {project}, nhưng bản cài trong dự án vẫn theo danh sách cũ.",
       "why": "Trợ lý có thể còn skill bạn đã bỏ, hoặc thiếu skill bạn mới thêm.",
       "ignore": "Lựa chọn mới của bạn chưa có hiệu lực.",

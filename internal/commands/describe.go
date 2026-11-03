@@ -42,8 +42,11 @@ var contracts = []contract{
 	{name: "skills list", summary: "a project's AgentKit and personal skills with their catalogs"},
 	{name: "skills set", summary: "add or remove skills of a project", mutation: true, risk: "medium",
 		preview: "default; preview until --apply", confirm: "--apply"},
-	{name: "kit add", summary: "give a project AgentKit", mutation: true, risk: "medium",
+	{name: "kit add", summary: "give a project AgentKit; on a project that has it, --kit adds another kit " +
+		"(agentkit.extra_kits, sharing the channel and targets)", mutation: true, risk: "medium",
 		preview: "default; preview until --apply", confirm: "--apply", network: true},
+	{name: "kit remove", summary: "remove a kit added with kit add: ak kit uninstall, then refresh the primary kit",
+		mutation: true, risk: "medium", preview: "default; preview until --apply", confirm: "--apply", network: true},
 	{name: "setup", summary: "ak binary, sign-in, doctor and pins", network: true},
 	{name: "setup install-ak", summary: "download and run AgentKit's official verified installer", mutation: true,
 		risk: "high", preview: "default; plan until --apply", confirm: "--apply", network: true},

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- A project can use several AgentKit kits. `acp kit add <id> --kit NAME` adds a kit to
+  `agentkit.extra_kits` next to the primary kit, sharing its channel and targets, and
+  `acp kit remove <id> --kit NAME` uninstalls it. `acp sync` installs the primary kit first on
+  each target and, on Codex, refreshes it again after another kit ran so its shared agents win
+  ([bestagentkits/agentkit#2980](https://github.com/bestagentkits/agentkit/issues/2980)); after
+  an uninstall it refreshes the primary kit, which writes back the shared files the uninstall
+  deleted ([bestagentkits/agentkit#2981](https://github.com/bestagentkits/agentkit/issues/2981)).
+  `acp status`, `acp skills list|set`, `acp scan`, `acp upgrade` and the dashboard cover every
+  kit; status and skills list put added kits under `agentkit.extra_kits`.
 - acp now notices AgentKit files that went missing while the installed version still matches,
   for example after uninstalling a sibling kit that shared them
   ([bestagentkits/agentkit#2981](https://github.com/bestagentkits/agentkit/issues/2981)). It
