@@ -1,0 +1,45 @@
+#!/bin/sh
+# Before a push, run scripts/verify.sh on each commit being pushed: the local stand-in for the
+# GitHub CI this repository no longer has. Enable it once per clone:
+#   git config core.hooksPath .githooks
+# The macOS app checks run only when the push changes what desktop.yml used to watch (or the remote
+# side is unknown, as for a new branch). Extra verify.sh flags go in ACP_VERIFY_FLAGS, for example
+#   ACP_VERIFY_FLAGS=--skip-linux git push
+# A commit that passed every check is recorded in <git-common-dir>/acp-verified and not run again.
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+stamp=$(git rev-parse --path-format=absolute --git-common-dir)/acp-verified
+desktop_paths='^(desktop/|scripts/build-desktop\.sh$|scripts/bundle-version\.sh$|scripts/tests/desktop-smoke\.sh$|internal/|cmd/|go\.(mod|sum)$)'
+
+todo=
+while read -r _ local_sha _ remote_sha; do
+  case $local_sha in *[!0]*) ;; *) continue ;; esac # deleting a remote ref
+  sha=$(git rev-parse --verify --quiet "$local_sha^{commit}") || continue
+  mode=full
+  case $remote_sha in
+    *[!0]*)
+      if git cat-file -e "$remote_sha^{commit}" 2>/dev/null &&
+        ! git diff --name-only "$remote_sha" "$sha" | grep -qE "$desktop_paths"; then
+        mode=no-desktop
+      fi
+      ;;
+  esac
+  todo="$todo $sha:$mode"
+done
+
+for item in $todo; do
+  sha=${item%:*}
+  mode=${item#*:}
+  if [ -f "$stamp" ] && { grep -qx "$sha full" "$stamp" || grep -qx "$sha $mode" "$stamp"; }; then
+    echo "pre-push: $sha already verified ($mode)"
+    continue
+  fi
+  set --
+  [ "$mode" = full ] || set -- --skip-desktop
+  # Word splitting of the user's extra flags is intended.
+  # shellcheck disable=SC2086
+  sh "$root/scripts/verify.sh" --rev "$sha" "$@" ${ACP_VERIFY_FLAGS:-} </dev/null
+  # Only a run with every check counts as verified.
+  [ -n "${ACP_VERIFY_FLAGS:-}" ] || echo "$sha $mode" >>"$stamp"
+done

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build the macOS app: a universal acp.app (Swift shell + bundled acp + Sparkle) and its DMG in
 # dist/desktop/, with checksums. Signing, notarization and the appcast run only when their
-# secrets are set; without them the app is signed ad hoc, which runs on this machine and in CI.
+# secrets are set; without them the app is signed ad hoc, which runs on this machine only.
 #   scripts/build-desktop.sh v0.1.0-beta.1
 #
 #   ACP_DEVELOPER_ID              codesign identity ("Developer ID Application: ..."), in a keychain

@@ -352,6 +352,123 @@ func contains(list []string, s string) bool {
 	return false
 }
 
+// pluginFixture declares pstack for demo (pinned 1.2.0) and a Codex plugin acp cannot manage.
+func pluginFixture(t *testing.T) *testkit.Fixture {
+	f := synced(t)
+	f.Manifest("demo", `{"id": "demo", "skills": [{"name": "herdr", "runtimes": ["claude", "codex"]}],
+  "agentkit": {"kit": "engineer", "channel": "beta", "targets": ["claude-code", "codex"], "skills": "all"},
+  "plugins": [{"name": "pstack@cursor-plugins", "runtime": "claude", "version": "1.2.0", "rules": ["pstack-models"]},
+              {"name": "tools@codex-market", "runtime": "codex"}]}`)
+	return f
+}
+
+// registry writes installed_plugins.json with pstack installed at the given scopes (scope -> version).
+func registry(f *testkit.Fixture, installs map[string]string) {
+	var items []string
+	for scope, version := range installs {
+		item := `{"scope": "` + scope + `", "version": "` + version + `", "installPath": "/cache/pstack/` + version + `"`
+		if scope == "project" {
+			item += `, "projectPath": "` + f.Repo + `"`
+		}
+		items = append(items, item+"}")
+	}
+	sort.Strings(items)
+	f.Write(filepath.Join(f.Home, ".claude/plugins/installed_plugins.json"),
+		`{"version": 2, "plugins": {"pstack@cursor-plugins": [`+strings.Join(items, ", ")+`]}}`)
+}
+
+func pluginFindings(r *Report) map[string]Finding {
+	out := map[string]Finding{}
+	for _, fd := range r.Findings {
+		if strings.HasPrefix(fd.Code, "plugin_") {
+			out[fd.Code] = fd
+		}
+	}
+	return out
+}
+
+func TestScanReportsDeclaredPluginsLikeThePythonAcp(t *testing.T) {
+	f := pluginFixture(t)
+	hook := `"hooks": {"SessionStart": [{"matcher": "startup|resume", "hooks": [{"type": "command", "command": "` +
+		filepath.Join(f.Base, "bin/acp") + ` link --hook"}]}]}`
+
+	// Nothing recorded: not installed, plus the Codex entry acp cannot manage.
+	got := pluginFindings(run(t, f, Options{}))
+	if len(got) != 2 {
+		t.Fatalf("findings %v", codes(run(t, f, Options{})))
+	}
+	if fd := got["plugin_not_installed"]; fd.Severity != Warn || fd.Fix != nil ||
+		fd.Params["command"] != "claude plugin install pstack@cursor-plugins --scope project" ||
+		fd.Params["checkout"] != f.Repo || fd.Raw != "+ plugin pstack@cursor-plugins --scope project" {
+		t.Errorf("not installed: %+v", fd)
+	}
+	if fd := got["plugin_runtime_unsupported"]; fd.Params["plugin"] != "tools@codex-market" || fd.Params["runtime"] != "codex" {
+		t.Errorf("unsupported: %+v", fd)
+	}
+
+	// Installed for this checkout at the pin and enabled there: healthy, even with a stale
+	// user-scope install that is not enabled.
+	registry(f, map[string]string{"project": "1.2.0", "user": "1.0.0"})
+	f.Write(filepath.Join(f.Repo, ".claude/settings.json"), `{"enabledPlugins": {"pstack@cursor-plugins": true}}`)
+	f.Write(filepath.Join(f.Home, ".claude/settings.json"), `{`+hook+`, "enabledPlugins": {"pstack@cursor-plugins": false}}`)
+	got = pluginFindings(run(t, f, Options{}))
+	delete(got, "plugin_runtime_unsupported")
+	if len(got) != 0 {
+		t.Fatalf("healthy plugin reported: %v", got)
+	}
+
+	// Installed but not enabled in the checkout's settings.
+	f.Write(filepath.Join(f.Repo, ".claude/settings.json"), `{"enabledPlugins": {"pstack@cursor-plugins": false}}`)
+	got = pluginFindings(run(t, f, Options{}))
+	if fd := got["plugin_not_enabled"]; fd.Params["command"] != "claude plugin enable pstack@cursor-plugins --scope project" ||
+		fd.Params["settings"] != filepath.Join(f.Repo, ".claude/settings.json") || fd.Params["installed"] != "1.2.0" {
+		t.Errorf("not enabled: %+v", fd)
+	}
+	if _, ok := got["plugin_not_installed"]; ok {
+		t.Error("an installed plugin was reported as not installed")
+	}
+
+	// Another checkout's project install does not count for this one.
+	f.Write(filepath.Join(f.Home, ".claude/plugins/installed_plugins.json"),
+		`{"version": 2, "plugins": {"pstack@cursor-plugins": [{"scope": "project", "projectPath": "`+f.WT+`", "version": "1.2.0"}]}}`)
+	if _, ok := pluginFindings(run(t, f, Options{}))["plugin_not_installed"]; !ok {
+		t.Error("a worktree's install counted as the main checkout's")
+	}
+
+	// Version behind the pin and still enabled for the whole machine: two findings, each with its
+	// own claude command; the enabled project install is otherwise fine.
+	registry(f, map[string]string{"project": "1.1.0", "user": "1.1.0"})
+	f.Write(filepath.Join(f.Repo, ".claude/settings.json"), `{"enabledPlugins": {"pstack@cursor-plugins": true}}`)
+	f.Write(filepath.Join(f.Home, ".claude/settings.json"), `{`+hook+`, "enabledPlugins": {"pstack@cursor-plugins": true}}`)
+	r := run(t, f, Options{})
+	got = pluginFindings(r)
+	if fd := got["plugin_version_drift"]; fd.Params["command"] != "claude plugin update pstack@cursor-plugins" ||
+		fd.Params["pin"] != "1.2.0" || fd.Params["installed"] != "1.1.0" {
+		t.Errorf("version drift: %+v", fd)
+	}
+	if fd := got["plugin_user_scope_enabled"]; fd.Params["command"] != "claude plugin disable pstack@cursor-plugins --scope user" ||
+		fd.Params["settings"] != filepath.Join(f.Home, ".claude/settings.json") || fd.Params["user_version"] != "1.1.0" {
+		t.Errorf("user scope: %+v", fd)
+	}
+	for _, c := range []string{"plugin_not_installed", "plugin_not_enabled"} {
+		if _, ok := got[c]; ok {
+			t.Errorf("%s reported for an enabled install", c)
+		}
+	}
+	for _, fd := range r.Findings {
+		if strings.HasPrefix(fd.Code, "plugin_") && fd.Module != "projects" {
+			t.Errorf("%s in module %s", fd.Code, fd.Module)
+		}
+		if fd.Code == "acp_hook_missing" {
+			t.Error("the hook was lost while writing enabledPlugins")
+		}
+	}
+	// Scan never runs claude: the fake CLI records every call it gets.
+	if calls := f.Read(filepath.Join(f.Home, ".fake-claude-calls")); calls != "" {
+		t.Fatalf("scan ran claude: %s", calls)
+	}
+}
+
 // A link an older acp made to the main checkout's agent memory shows in git status; the fix scan
 // offers (acp link) removes it, so the finding goes away.
 func TestScanFixDropsOldStateLinks(t *testing.T) {

@@ -161,6 +161,13 @@ This exclude applies to that worktree only:
 
 `acp scan` writes nothing. It checks each project, each worktree and the shared pieces (hooks, MCP servers, global skills, ak), with 20 seconds for each part. Each finding has a stable code, a severity (`error`, `warn`, `decide`, `info`) and four plain-language parts: what happened, why it matters, what happens if you ignore it, and what to do. A finding that acp can fix also carries the preview command.
 
+Plugins a manifest declares (`plugins: [{name: <plugin>@<marketplace>, runtime: claude, version, rules}]`)
+are checked against what Claude Code records: `~/.claude/plugins/installed_plugins.json` and the
+`enabledPlugins` of the main checkout's `.claude/settings.json` and of `~/.claude/settings.json`.
+The codes are `plugin_not_installed`, `plugin_not_enabled`, `plugin_version_drift`,
+`plugin_user_scope_enabled` and `plugin_runtime_unsupported`. Each carries the `claude plugin
+install|enable|update|disable` command a person runs; scan never runs `claude` itself.
+
 `acp web` listens on loopback only. The URL carries a one-time code, which the server exchanges for a bearer token, and it refuses unknown Host and Origin headers. A change goes through these steps:
 1. The server runs the preview and keeps a digest of its result.
 2. You apply only while that digest still matches.
@@ -206,8 +213,24 @@ cd desktop && swift test && cd ..                    # macOS app
 sh scripts/build-desktop.sh v0.0.0-dev && sh scripts/tests/desktop-smoke.sh dist/desktop/acp.app v0.0.0-dev
 ```
 
-CI runs the tests on Ubuntu and macOS, then tries the installer. On macOS it also builds the app
-(signed ad hoc), runs the smoke test and keeps the DMG as a workflow artifact. Pushing a tag `v*` runs the release workflow:
+There is no CI on GitHub. `sh scripts/verify.sh` runs every check on your machine, in a throwaway
+copy so the checkout and `dist/` stay untouched:
+1. `go vet`, `go test -race` and the installer tests on macOS.
+2. The same in a `golang` container of the `go.mod` version, as a non-root user (needs Docker, for
+   example OrbStack; `--skip-linux` leaves it out).
+3. `swift test`, then builds the app (signed ad hoc) and runs its smoke test, which opens the app
+   for a moment (`--skip-desktop` leaves it out).
+
+`--rev REV` checks one commit instead of the working tree. To run it before every push:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook checks each pushed commit once. It skips the app when the push changes nothing the app
+is built from, and passes `ACP_VERIFY_FLAGS` (for example `--skip-linux`) on to verify.sh.
+
+Pushing a tag `v*` runs the release workflow on GitHub Actions:
 1. It builds four archives (darwin/linux × arm64/amd64).
 2. It writes `checksums.txt` and `install.sh`.
 3. It creates the GitHub Release. A tag with a `-` in it is a prerelease.

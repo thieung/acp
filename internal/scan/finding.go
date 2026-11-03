@@ -29,6 +29,8 @@ var Codes = []string{
 	"personal_link_missing", "real_dir_blocks_link", "foreign_link", "worktree_unlinked",
 	"old_copy_shadows_main", "tracked_agent_files_changed", "untracked_acp_links", "exclude_conflict",
 	"project_not_tracked",
+	"plugin_runtime_unsupported", "plugin_not_installed", "plugin_not_enabled", "plugin_version_drift",
+	"plugin_user_scope_enabled",
 	"ak_missing", "ak_not_signed_in", "ak_doctor_unhealthy", "pin_missing",
 	"hook_target_missing", "hook_duplicate", "acp_hook_missing", "acp_hook_legacy", "acp_hook_stale",
 	"mcp_command_missing", "global_skill_drift", "skill_link_broken", "skill_dir_without_skill_md",

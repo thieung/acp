@@ -316,6 +316,61 @@
         "Codex"
       ]
     },
+    "plugin_runtime_unsupported": {
+      "title": "Plugin {plugin} của {project} khai báo chưa đúng",
+      "what": "Trong projects/{project}.json, plugin {plugin} ghi runtime {runtime}. acp chỉ quản plugin của Claude Code, tên theo dạng <plugin>@<marketplace>.",
+      "why": "Khai báo sai thì acp không biết cài hay kiểm tra plugin này, nên dự án có thể thiếu plugin mà bạn tưởng đã có.",
+      "ignore": "Plugin này bị bỏ qua ở mọi lần sync và scan.",
+      "todo": "Sửa mục plugins trong projects/{project}.json: runtime là claude và name có dạng <plugin>@<marketplace>, ví dụ pstack@cursor-plugins.",
+      "glossary": [
+        "plugin",
+        "Claude Code"
+      ]
+    },
+    "plugin_not_installed": {
+      "title": "Plugin {plugin} chưa được cài cho {project}",
+      "what": "Dự án {project} khai báo plugin {plugin}{pin_text}, nhưng Claude Code chưa ghi nhận bản cài nào ở phạm vi dự án cho thư mục {checkout}.",
+      "why": "Thiếu plugin thì trợ lý trong dự án không có các lệnh, skill và rule mà plugin mang theo.",
+      "ignore": "Trợ lý vẫn chạy, nhưng không có plugin {plugin}.",
+      "todo": "Mở terminal trong {checkout} rồi chạy: {command}. Hoặc chạy acp sync {project} ở control plane Python.",
+      "glossary": [
+        "plugin",
+        "Claude Code"
+      ]
+    },
+    "plugin_not_enabled": {
+      "title": "Plugin {plugin} của {project} chưa được bật",
+      "what": "Plugin {plugin} đã cài ở phạm vi dự án (bản {installed}), nhưng {settings} chưa bật nó (enabledPlugins).",
+      "why": "Plugin cài mà chưa bật thì Claude Code không nạp nó trong dự án này.",
+      "ignore": "Trợ lý trong {project} vẫn thiếu plugin {plugin}.",
+      "todo": "Mở terminal trong {checkout} rồi chạy: {command}.",
+      "glossary": [
+        "plugin",
+        "Claude Code"
+      ]
+    },
+    "plugin_version_drift": {
+      "title": "Plugin {plugin} của {project} chưa đúng phiên bản",
+      "what": "Dự án đang cài plugin {plugin} bản {installed}, còn projects/{project}.json ghim bản {pin}.",
+      "why": "Bản cài khác bản ghim thì máy khác hoặc phiên khác có thể chạy plugin khác bạn, khó biết lỗi đến từ đâu.",
+      "ignore": "Plugin vẫn chạy với bản {installed}; mốc ghim trong manifest không còn đúng.",
+      "todo": "Mở terminal trong {checkout} rồi chạy: {command}. Sau đó sửa version trong projects/{project}.json cho khớp bản vừa cài. acp không tự đổi phiên bản plugin.",
+      "glossary": [
+        "plugin",
+        "Claude Code"
+      ]
+    },
+    "plugin_user_scope_enabled": {
+      "title": "Plugin {plugin} còn bật cho cả máy",
+      "what": "Dự án {project} khai báo plugin {plugin} theo phạm vi dự án, nhưng {settings} vẫn bật nó ở phạm vi người dùng, tức mọi thư mục trên máy.",
+      "why": "Plugin bật cho cả máy sẽ nạp vào mọi dự án, kể cả dự án không khai báo, và có thể chạy bản khác với bản dự án ghim.",
+      "ignore": "Các dự án khác vẫn thấy plugin {plugin}; bản bật theo dự án và bản bật cho cả máy có thể lệch nhau.",
+      "todo": "Chạy: {command}. acp không tự tắt plugin ở phạm vi người dùng.",
+      "glossary": [
+        "plugin",
+        "Claude Code"
+      ]
+    },
     "check_timed_out": {
       "title": "Phần kiểm tra {check} chạy quá lâu",
       "what": "Phần kiểm tra {check} không xong trong {seconds} giây nên đã được bỏ qua.",
@@ -346,6 +401,7 @@
     "hook": "Một lệnh tự chạy khi có sự kiện, ví dụ khi bạn mở một phiên làm việc mới.",
     "MCP": "Cách để trợ lý AI dùng thêm công cụ bên ngoài (Model Context Protocol).",
     "bản sao lưu": "Bản chép lại trước khi thay đổi, cất trong runtime/backups để có thể lấy lại.",
-    "liên kết": "Một lối tắt (symlink) trỏ tới tệp hoặc thư mục ở nơi khác, nên không phải chép lại."
+    "liên kết": "Một lối tắt (symlink) trỏ tới tệp hoặc thư mục ở nơi khác, nên không phải chép lại.",
+    "plugin": "Gói mở rộng của Claude Code (lệnh, skill, agent, hook, rule) lấy từ một marketplace; có thể bật cho cả máy (phạm vi người dùng) hoặc cho từng dự án."
   }
 }

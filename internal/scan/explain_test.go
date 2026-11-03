@@ -64,3 +64,21 @@ func TestFindingsAreRedacted(t *testing.T) {
 		}
 	}
 }
+
+func TestPluginExplanationsCarryTheClaudeCommand(t *testing.T) {
+	params := map[string]string{"project": "ejar", "plugin": "pstack@cursor-plugins", "checkout": "/w/ejar",
+		"command": "claude plugin install pstack@cursor-plugins --scope project", "pin_text": " bản 0.15.36"}
+	e, ok := Explain("plugin_not_installed", params)
+	if !ok || !strings.Contains(e.Todo, params["command"]) || !strings.Contains(e.What, "bản 0.15.36") ||
+		!strings.Contains(e.Title, "pstack@cursor-plugins") {
+		t.Fatalf("%+v", e)
+	}
+	for _, code := range []string{"plugin_not_enabled", "plugin_version_drift", "plugin_user_scope_enabled"} {
+		if e, _ := Explain(code, nil); !strings.Contains(e.Todo, "<command>") {
+			t.Errorf("%s todo lacks the command: %q", code, e.Todo)
+		}
+	}
+	if e, _ := Explain("plugin_runtime_unsupported", nil); !strings.Contains(e.Todo, "runtime") {
+		t.Errorf("unsupported todo %q", e.Todo)
+	}
+}

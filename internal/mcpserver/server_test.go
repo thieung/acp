@@ -165,3 +165,43 @@ func TestScanOutputHasNoSecrets(t *testing.T) {
 		t.Fatal("unknown module is not a tool error")
 	}
 }
+
+func TestScanAndExplainCoverDeclaredPlugins(t *testing.T) {
+	f := testkit.New(t)
+	f.Manifest("demo", `{"id": "demo", "plugins": [{"name": "pstack@cursor-plugins", "runtime": "claude", "version": "1.2.0"}]}`)
+	cs := connect(t, f)
+	text, isErr := call(t, cs, "acp_scan", map[string]any{"module": "projects"})
+	var report struct {
+		Findings []struct {
+			Code   string
+			Fix    any
+			Todo   string
+			Params map[string]string
+		} `json:"findings"`
+	}
+	if isErr || json.Unmarshal([]byte(text), &report) != nil {
+		t.Fatalf("scan: %v %s", isErr, text)
+	}
+	found := false
+	for _, fd := range report.Findings {
+		if fd.Code != "plugin_not_installed" {
+			continue
+		}
+		found = true
+		if fd.Fix != nil || !strings.Contains(fd.Todo, "claude plugin install pstack@cursor-plugins --scope project") {
+			t.Errorf("finding %+v", fd)
+		}
+	}
+	if !found {
+		t.Fatalf("no plugin_not_installed in %s", text)
+	}
+	text, isErr = call(t, cs, "acp_explain", map[string]any{"code": "plugin_version_drift"})
+	var ex struct{ Todo, Title string }
+	if isErr || json.Unmarshal([]byte(text), &ex) != nil || !strings.Contains(ex.Todo, "<command>") ||
+		!strings.Contains(ex.Title, "<plugin>") {
+		t.Fatalf("explain: %v %s", isErr, text)
+	}
+	if calls := f.Read(filepath.Join(f.Home, ".fake-claude-calls")); calls != "" {
+		t.Fatalf("scan ran claude: %s", calls)
+	}
+}

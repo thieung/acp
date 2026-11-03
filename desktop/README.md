@@ -33,8 +33,8 @@ sh scripts/tests/desktop-smoke.sh dist/desktop/acp.app v0.0.0-dev
 4. It signs inside out and builds the DMG with an `/Applications` link.
 5. It appends the DMG's sha256 to `checksums.txt`.
 
-Without secrets the app is signed ad hoc. That runs on the machine that built it and in CI, but
-Gatekeeper blocks it elsewhere, so releases attach only a signed and notarized DMG.
+Without secrets the app is signed ad hoc. That runs on the machine that built it (which is how
+`scripts/verify.sh` smokes it), but Gatekeeper blocks it elsewhere, so releases attach only a signed and notarized DMG.
 
 The smoke test checks both architectures, the rpath, the signature and `acp --version`. It also
 drives the Go contract in a throwaway home (init, web, `GET /` with its CSP, `POST /api/session`).
@@ -55,8 +55,8 @@ cd desktop && ACP_DESKTOP_BIN=/tmp/acp swift run AcpDesktop
 
 ## What the maintainer supplies
 
-None of these exist in the repository. Without them CI and releases still build the app ad hoc,
-and the release job skips the DMG with a notice.
+None of these exist in the repository. Without them `scripts/verify.sh` still builds the app ad
+hoc, and the release job skips the DMG with a notice.
 
 | What | Where it goes | Used for |
 |------|---------------|----------|
@@ -77,8 +77,8 @@ only when both are set and the feed is https.
 When the private key is set, `generate_appcast` writes `dist/desktop/appcast/appcast.xml` for
 this release. Its download links start with `ACP_SPARKLE_DOWNLOAD_URL_PREFIX`, which is then
 required: a public https location that serves the DMG without signing in (this repository's
-releases are private, so they cannot be it). In CI it comes from the repository variable of the
-same name. The release job attaches `appcast.xml` to the release; host it, merged with the
+releases are private, so they cannot be it). In the release workflow it comes from the repository
+variable of the same name. The release job attaches `appcast.xml` to the release; host it, merged with the
 earlier entries, at the feed URL.
 
 ## Install and remove

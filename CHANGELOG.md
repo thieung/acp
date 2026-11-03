@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `acp scan`, `acp explain` and the MCP tools `acp_scan`/`acp_explain` understand the manifest
+  key `plugins` (Claude Code plugins pinned per project). New codes `plugin_not_installed`,
+  `plugin_not_enabled`, `plugin_version_drift`, `plugin_user_scope_enabled` and
+  `plugin_runtime_unsupported` match the Python acp's `status` and `sync --dry-run`; each names
+  the `claude plugin ...` command to run. Scan only reads `installed_plugins.json` and the two
+  `settings.json` files.
 - A project can use several AgentKit kits. `acp kit add <id> --kit NAME` adds a kit to
   `agentkit.extra_kits` next to the primary kit, sharing its channel and targets, and
   `acp kit remove <id> --kit NAME` uninstalls it. `acp sync` installs the primary kit first on
@@ -39,8 +45,10 @@
   web` dashboard, gives acp a clean, allow-listed environment and offers to move itself to
   Applications. Sparkle updates it once a feed and key are configured.
   `scripts/build-desktop.sh` builds a universal app and DMG, and `scripts/tests/desktop-smoke.sh`
-  launches it. CI builds and smokes it; a release attaches the DMG only when it is signed and
-  notarized.
+  launches it. A release attaches the DMG only when it is signed and notarized.
+- The GitHub CI workflows (`ci.yml`, `desktop.yml`) are gone. `scripts/verify.sh` runs the same
+  checks on your machine (macOS, Linux in Docker, the macOS app), and `.githooks/pre-push` runs it
+  on each pushed commit once `git config core.hooksPath .githooks` is set.
 - `acp setup login --api-key-stdin` signs in to AgentKit with an API key read from stdin. The
   key reaches `ak` on stdin only, never argv, the environment, logs or output. The dashboard has
   a sign-in form for it.

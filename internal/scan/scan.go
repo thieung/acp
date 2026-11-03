@@ -257,10 +257,64 @@ func projectChecks(ctx context.Context, c *collector, p *core.Project) {
 			}
 		}
 	}
+	pluginChecks(c, p, main)
 	if ctx.Err() != nil {
 		return
 	}
 	checkout(ctx, c, eng, p, main, main)
+}
+
+// pluginChecks reports what Claude Code records for each plugin the manifest declares, the way
+// the Python acp's sync --dry-run and status do. It only reads installed_plugins.json and two
+// settings files; the fix is a `claude plugin` command a person runs, never acp.
+func pluginChecks(c *collector, p *core.Project, main string) {
+	settings := filepath.Join(main, ".claude", "settings.json")
+	userSettings := filepath.Join(core.GlobalHomes()["claude"], "settings.json")
+	for _, pl := range p.Plugins() {
+		subject := p.ID + " " + pl.Name
+		params := map[string]string{"project": p.ID, "plugin": pl.Name, "runtime": pl.Runtime, "checkout": main}
+		if !pl.Supported() {
+			c.add("plugin_runtime_unsupported", Warn, "projects", subject, params,
+				fmt.Sprintf("plugin '%s': runtime '%s' is not supported (Claude Code only, named <plugin>@<marketplace>)",
+					pl.Name, pl.Runtime), nil)
+			continue
+		}
+		s := core.ReadPluginState(pl, main)
+		params["pin"], params["installed"] = pl.Version, s.Installed
+		if pl.Version != "" {
+			params["pin_text"] = " bản " + pl.Version
+		}
+		switch {
+		case s.Installed == "":
+			params["command"] = "claude plugin install " + core.ShellQuote(pl.Name) + " --scope project"
+			c.add("plugin_not_installed", Warn, "projects", subject, params, "+ plugin "+pl.Name+" --scope project", nil)
+		case !s.Enabled:
+			params["settings"], params["command"] = settings, "claude plugin enable "+core.ShellQuote(pl.Name)+" --scope project"
+			c.add("plugin_not_enabled", Warn, "projects", subject, params, "+ plugin "+pl.Name+": enable --scope project", nil)
+		}
+		if s.Installed != "" && pl.Version != "" && s.Installed != pl.Version {
+			dp := clone(params)
+			dp["command"] = "claude plugin update " + core.ShellQuote(pl.Name)
+			c.add("plugin_version_drift", Warn, "projects", subject+" version", dp,
+				fmt.Sprintf("~ plugin %s: installed %s, manifest pins %s (`claude plugin update %s`, then move the pin)",
+					pl.Name, s.Installed, pl.Version, pl.Name), nil)
+		}
+		if s.UserEnabled {
+			up := clone(params)
+			up["settings"], up["user_version"] = userSettings, s.UserVersion
+			up["command"] = "claude plugin disable " + core.ShellQuote(pl.Name) + " --scope user"
+			c.add("plugin_user_scope_enabled", Warn, "projects", subject+" user scope", up,
+				fmt.Sprintf("~ plugin %s is also enabled at user scope: `claude plugin disable %s --scope user`", pl.Name, pl.Name), nil)
+		}
+	}
+}
+
+func clone(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 // checkout reports what a dry-run link pass and git status say about one checkout.
