@@ -5,3 +5,8 @@ dist/
 build/
 .pytest_cache/
 .DS_Store
+# Go output
+/acp
+# macOS app (scripts/build-desktop.sh builds into dist/desktop/)
+/desktop/.build/
+/desktop/.swiftpm/

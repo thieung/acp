@@ -300,11 +300,11 @@ footer p { margin: 0; }
   <section class="hero">
     <div>
       <h1><span lang="en">Same agent setup in every repo and worktree.</span><span lang="vi">Một bộ agent cho mọi repo và worktree.</span></h1>
-      <p class="lede" lang="en">acp pins AgentKit, links your own skills and repairs broken installs, for Claude Code and Codex.</p>
-      <p class="lede" lang="vi">acp ghim phiên bản AgentKit, link skill riêng của bạn và sửa bản cài hỏng, cho Claude Code và Codex.</p>
+      <p class="lede" lang="en">acp pins AgentKit, links your own skills into every worktree and tells you in plain words what is off, for Claude Code and Codex.</p>
+      <p class="lede" lang="vi">acp ghim phiên bản AgentKit, link skill riêng của bạn vào mọi worktree và nói rõ bằng lời thường chỗ nào đang lệch, cho Claude Code và Codex.</p>
       <div class="hero-actions">
-        <div class="term"><div class="cmd"><pre><code>uv tool install git+ssh://git@github.com/thieung/acp.git</code></pre><button type="button" class="copy"></button></div></div>
-        <p class="needs"><span lang="en">Needs Python 3.10+, uv and SSH access to the private repo.</span><span lang="vi">Cần Python 3.10+, uv và quyền SSH vào repo private.</span></p>
+        <div class="term"><div class="cmd"><pre><code>gh release download v0.2.0-beta.1 -R thieung/acp -p install.sh -O - | sh</code></pre><button type="button" class="copy"></button></div></div>
+        <p class="needs"><span lang="en">One binary for macOS and Linux. Needs the GitHub CLI signed in with access to the private repo.</span><span lang="vi">Một binary cho macOS và Linux. Cần GitHub CLI đã đăng nhập, có quyền vào repo private.</span></p>
         <a class="more" href="#install"><span lang="en">Read the guide</span><span lang="vi">Đọc hướng dẫn</span></a>
       </div>
     </div>
@@ -359,8 +359,8 @@ footer p { margin: 0; }
 
   <section class="ways" aria-labelledby="ways">
     <h2 id="ways"><span lang="en">One tool, three ways in.</span><span lang="vi">Một công cụ, ba cách dùng.</span></h2>
-    <p lang="en">The terminal, a local web page and your coding agent all run the same commands, and each shows the plan before it changes anything.</p>
-    <p lang="vi">Terminal, một trang web trên máy bạn và chính coding agent đều chạy cùng các lệnh, và đều cho xem kế hoạch trước khi thay đổi.</p>
+    <p lang="en">The terminal, a local web page and your coding agent all run the same commands, and each shows the plan before anything changes.</p>
+    <p lang="vi">Terminal, một trang web trên máy bạn và chính coding agent đều chạy cùng các lệnh, và đều cho xem kế hoạch trước khi có gì thay đổi.</p>
     <div class="ways-grid">
       <div class="term" role="img" aria-label="Output of acp: three projects, one with a worktree that needs links">
         <div class="cmd"><pre><code>acp</code></pre></div>
@@ -377,14 +377,14 @@ fix: acp sync --all</span></pre>
       </div>
       <dl class="surfaces">
         <div><dt>Terminal<code>acp</code></dt>
-          <dd lang="en">Status, sync, skills and repairs. Every command takes <code>--json</code> for scripts and CI.</dd>
-          <dd lang="vi">Trạng thái, sync, skill và sửa lỗi. Mọi lệnh nhận <code>--json</code> cho script và CI.</dd></div>
+          <dd lang="en">Status, sync, skills and a health check. Every command takes <code>--json</code> for scripts and CI.</dd>
+          <dd lang="vi">Trạng thái, sync, skill và kiểm tra sức khỏe. Mọi lệnh nhận <code>--json</code> cho script và CI.</dd></div>
         <div><dt><span lang="en">Web page</span><span lang="vi">Trang web</span><code class="w">acp web</code></dt>
-          <dd lang="en">The same table in your browser, on your machine only. Click a project to see what is wrong and what a sync would do.</dd>
-          <dd lang="vi">Cùng bảng đó trong trình duyệt, chỉ chạy trên máy bạn. Bấm vào project để xem đang bị gì và sync sẽ làm gì.</dd></div>
+          <dd lang="en">A dashboard in your browser, on your machine only. Every change shows a preview first and applies only from that preview.</dd>
+          <dd lang="vi">Một bảng điều khiển trong trình duyệt, chỉ chạy trên máy bạn. Mọi thay đổi đều hiện bản xem trước và chỉ áp dụng từ đúng bản xem trước đó.</dd></div>
         <div><dt><span lang="en">Your agent</span><span lang="vi">Agent của bạn</span><code class="w">acp mcp</code></dt>
-          <dd lang="en">Claude Code and Codex call the same commands as MCP tools, and changes wait for your yes.</dd>
-          <dd lang="vi">Claude Code và Codex gọi cùng các lệnh dưới dạng tool MCP, và mọi thay đổi chờ bạn đồng ý.</dd></div>
+          <dd lang="en">Claude Code and Codex read status and scan results, and preview a fix. Applying it stays with you.</dd>
+          <dd lang="vi">Claude Code và Codex đọc trạng thái, kết quả scan, và xem trước cách sửa. Áp dụng thì vẫn là bạn.</dd></div>
       </dl>
     </div>
   </section>
@@ -409,7 +409,7 @@ fix: acp sync --all</span></pre>
             <li><a href="#skills"><span lang="en">Change a project's skills</span><span lang="vi">Đổi skill của project</span></a></li>
             <li><a href="#fleet"><span lang="en">Many projects and worktrees</span><span lang="vi">Nhiều project và worktree</span></a></li>
             <li><a href="#mcp"><span lang="en">Connect an agent</span><span lang="vi">Kết nối agent</span></a></li>
-            <li><a href="#when-sync-fails"><span lang="en">When a sync fails</span><span lang="vi">Khi sync lỗi</span></a></li>
+            <li><a href="#when-sync-fails"><span lang="en">When something is off</span><span lang="vi">Khi có gì đó lệch</span></a></li>
           </ul>
           <p><span lang="en">Reference</span><span lang="vi">Tra cứu</span></p>
           <ul>
@@ -431,36 +431,48 @@ fix: acp sync --all</span></pre>
             <h2 class="h"><a href="#install"><span lang="en">Install acp and ak</span><span lang="vi">Cài acp và ak</span></a></h2>
             <p class="intro" lang="en"><code>ak</code> installs AgentKit into a repo. <code>acp</code> decides what each repo should have and keeps every repo and worktree that way.</p>
             <p class="intro" lang="vi"><code>ak</code> cài AgentKit vào một repo. <code>acp</code> quyết định mỗi repo cần có gì và giữ mọi repo, mọi worktree đúng như thế.</p>
-            <p lang="en">You need Python 3.10 or newer, <a href="https://docs.astral.sh/uv/">uv</a>, and an SSH key that GitHub accepts for <code>thieung/acp</code>. <code class="w">ssh -T git@github.com</code> should greet you by name.</p>
-            <p lang="vi">Bạn cần Python 3.10 trở lên, <a href="https://docs.astral.sh/uv/">uv</a>, và một SSH key được GitHub chấp nhận cho <code>thieung/acp</code>. Lệnh <code class="w">ssh -T git@github.com</code> phải chào đúng tên bạn.</p>
+            <p lang="en">acp is one binary for macOS and Linux (arm64 and amd64). The repository is private, so you need the <a href="https://cli.github.com/">GitHub CLI</a> signed in with access to <code>thieung/acp</code>. <code class="w">gh auth status</code> should show your account.</p>
+            <p lang="vi">acp là một binary cho macOS và Linux (arm64 và amd64). Repo đang private nên bạn cần <a href="https://cli.github.com/">GitHub CLI</a> đã đăng nhập, có quyền vào <code>thieung/acp</code>. Lệnh <code class="w">gh auth status</code> phải hiện đúng tài khoản của bạn.</p>
             <div class="term">
-              <div class="cmd"><pre><code>uv tool install git+ssh://git@github.com/thieung/acp.git
+              <div class="cmd"><pre><code>gh release download v0.2.0-beta.1 -R thieung/acp -p install.sh -O - | sh
 acp setup</code></pre><button type="button" class="copy"></button></div>
               <div class="out"><p class="out-label"><span lang="en">You should see</span><span lang="vi">Kết quả mong đợi</span></p><pre>ak       3.0.0-beta.36  (/Users/you/.local/bin/ak)
 login    signed in (api_key)
 doctor   healthy</pre></div>
             </div>
+            <p lang="en">The installer picks the build for your machine, checks its sha256, puts <code>acp</code> in <code>~/.local/bin</code> and runs <code class="w">acp init</code>. It only replaces an earlier acp; anything else in that place stops it. <code>ACP_INSTALL_DIR</code> picks another folder and <code class="w">ACP_NO_INIT=1</code> skips init.</p>
+            <p lang="vi">Installer chọn bản dựng cho máy bạn, kiểm sha256, đặt <code>acp</code> vào <code>~/.local/bin</code> rồi chạy <code class="w">acp init</code>. Nó chỉ thay một bản acp cũ; gặp thứ gì khác ở chỗ đó thì dừng. <code>ACP_INSTALL_DIR</code> chọn thư mục khác, còn <code class="w">ACP_NO_INIT=1</code> bỏ bước init.</p>
             <p lang="en">If <code>ak</code> is missing, let acp run AgentKit's official installer, then sign in. Without <code>--apply</code>, <code class="w">acp setup install-ak</code> only shows what it would run.</p>
             <p lang="vi">Nếu chưa có <code>ak</code>, để acp chạy installer chính thức của AgentKit rồi đăng nhập. Không có <code>--apply</code> thì <code class="w">acp setup install-ak</code> chỉ hiện những gì nó sẽ chạy.</p>
             <div class="term"><div class="cmd"><pre><code>acp setup install-ak --apply
-ak onboard</code></pre><button type="button" class="copy"></button></div></div>
-            <p lang="en">Update acp later with <code class="w">uv tool upgrade acp</code>. pipx works too: <code class="w">pipx install git+ssh://git@github.com/thieung/acp.git</code>.</p>
-            <p lang="vi">Cập nhật acp sau này bằng <code class="w">uv tool upgrade acp</code>. Dùng pipx cũng được: <code class="w">pipx install git+ssh://git@github.com/thieung/acp.git</code>.</p>
+acp setup login</code></pre><button type="button" class="copy"></button></div></div>
+            <p lang="en">To update acp later, run the installer again with a newer tag. Your control plane stays where it is.</p>
+            <p lang="vi">Muốn cập nhật acp sau này, chạy lại installer với tag mới hơn. Control plane của bạn vẫn ở nguyên chỗ cũ.</p>
           </section>
 
           <section class="station" id="control-plane">
             <span class="n" aria-hidden="true">2</span>
             <h2 class="h"><a href="#control-plane"><span lang="en">Create a control plane</span><span lang="vi">Tạo control plane</span></a></h2>
-            <p class="intro" lang="en">A small folder of JSON files that says what every project should have. Put it in git so the decisions travel with you.</p>
-            <p class="intro" lang="vi">Một thư mục nhỏ gồm các file JSON, ghi rõ mỗi project cần có gì. Hãy để nó trong git để các quyết định đi theo bạn sang máy khác.</p>
+            <p class="intro" lang="en">A small folder of JSON files that says what every project should have. The installer already created one in <code>~/agent-control-plane</code>; put it in git so the decisions travel with you.</p>
+            <p class="intro" lang="vi">Một thư mục nhỏ gồm các file JSON, ghi rõ mỗi project cần có gì. Installer đã tạo sẵn một cái ở <code>~/agent-control-plane</code>; hãy để nó trong git để các quyết định đi theo bạn sang máy khác.</p>
             <div class="term">
-              <div class="cmd"><pre><code>acp init ~/agent-control-plane</code></pre><button type="button" class="copy"></button></div>
-              <div class="out"><p class="out-label"><span lang="en">You should see</span><span lang="vi">Kết quả mong đợi</span></p><pre>created control plane /Users/you/agent-control-plane
-default root recorded in /Users/you/.config/acp/config.json
-next: `acp setup` to check ak, then `acp add &lt;repo&gt;` for each project, then `acp web`</pre></div>
+              <div class="cmd"><pre><code>acp init</code></pre><button type="button" class="copy"></button></div>
+              <div class="out"><p class="out-label"><span lang="en">You should see</span><span lang="vi">Kết quả mong đợi</span></p><pre>  + projects/
+  + skills/
+  + runtime/
+  + projects.local.json
+  + agentkit-releases.lock.json
+  + global-skills.json
+  + .gitignore
+  + AGENTS.md
+control plane: /Users/you/agent-control-plane (recorded in /Users/you/.config/acp/root)
+next:
+  acp activity        repos you work in most
+  acp add &lt;path&gt;      add one to the fleet
+  acp scan            check that everything is linked</pre></div>
             </div>
-            <p lang="en">The recorded default lets every later command run from any folder. To keep the plane in git, run <code class="w">git init</code> inside it and commit; machine paths and backups are already in its <code>.gitignore</code>. What each file holds is under <a href="#files">Files</a>.</p>
-            <p lang="vi">Nhờ mặc định đã ghi, mọi lệnh sau đó chạy được từ bất kỳ thư mục nào. Muốn đưa control plane vào git, chạy <code class="w">git init</code> bên trong rồi commit; đường dẫn máy và bản sao lưu đã nằm sẵn trong <code>.gitignore</code>. Mỗi file chứa gì có ở mục <a href="#files">File</a>.</p>
+            <p lang="en">On a folder that already is a control plane, init adds only what is missing and keeps the rest. The recorded root lets every later command run from any folder; <code class="w">acp init --root DIR</code> puts the plane somewhere else and records that instead. To keep it in git, run <code class="w">git init</code> inside it and commit; machine paths and backups are already in its <code>.gitignore</code>. What each file holds is under <a href="#files">Files</a>.</p>
+            <p lang="vi">Với thư mục đã là control plane, init chỉ thêm những gì còn thiếu và giữ nguyên phần còn lại. Nhờ root đã ghi, mọi lệnh sau đó chạy được từ bất kỳ thư mục nào; <code class="w">acp init --root DIR</code> đặt control plane ở chỗ khác và ghi lại chỗ đó. Muốn đưa nó vào git, chạy <code class="w">git init</code> bên trong rồi commit; đường dẫn máy và bản sao lưu đã nằm sẵn trong <code>.gitignore</code>. Mỗi file chứa gì có ở mục <a href="#files">File</a>.</p>
           </section>
 
           <section class="station" id="add-project">
@@ -483,6 +495,8 @@ my-app  /Users/you/code/my-app  in sync</pre></div>
   "agentkit": { "kit": "engineer", "channel": "beta", "targets": ["claude-code", "codex"], "skills": "all" },
   "skills": []
 }</code></pre><button type="button" class="copy"></button></div></div>
+            <p lang="en">Starting from scratch? <code class="w">acp new ~/code/my-app</code> creates the folder (or runs <code>git init</code> in an existing one, or takes an existing repo), adds it and installs AgentKit for Claude Code only. Pick runtimes with <code>--runtimes claude,codex</code> and personal skills with <code>--skills</code>; defaults can live in <code>project-defaults.json</code>. No commit is made, and what acp and AgentKit created is listed in <code>.git/info/exclude</code> so a first <code>git add -A</code> leaves it out.</p>
+            <p lang="vi">Bắt đầu từ con số không? <code class="w">acp new ~/code/my-app</code> tạo thư mục (hoặc chạy <code>git init</code> trong thư mục có sẵn, hoặc nhận repo có sẵn), thêm vào fleet và cài AgentKit chỉ cho Claude Code. Chọn runtime bằng <code>--runtimes claude,codex</code> và skill cá nhân bằng <code>--skills</code>; giá trị mặc định có thể đặt trong <code>project-defaults.json</code>. acp không commit, và những gì acp cùng AgentKit tạo ra được ghi vào <code>.git/info/exclude</code> để lần <code>git add -A</code> đầu tiên bỏ qua chúng.</p>
           </section>
 
           <section class="station" id="sync">
@@ -504,29 +518,31 @@ acp sync --dry-run
 acp sync</code></pre><button type="button" class="copy"></button></div>
               <div class="out"><p class="out-label"><span lang="en">You should see</span><span lang="vi">Kết quả mong đợi</span></p><pre>my-app  /Users/you/code/my-app  in sync</pre></div>
             </div>
-            <p lang="en">A sync installs or refreshes AgentKit at the pinned version, links your personal skills, and links every worktree to the main checkout's agent files. If it fails, see <a href="#when-sync-fails">When a sync fails</a>.</p>
-            <p lang="vi">Một lần sync cài hoặc làm mới AgentKit theo bản đã ghim, link skill cá nhân, và link mọi worktree tới file agent của checkout chính. Nếu lỗi, xem <a href="#when-sync-fails">Khi sync lỗi</a>.</p>
+            <p lang="en">A sync installs or refreshes AgentKit at the pinned version, links your personal skills, and links every worktree to the main checkout's agent files. If something is off, see <a href="#when-sync-fails">When something is off</a>.</p>
+            <p lang="vi">Một lần sync cài hoặc làm mới AgentKit theo bản đã ghim, link skill cá nhân, và link mọi worktree tới file agent của checkout chính. Nếu có gì đó lệch, xem <a href="#when-sync-fails">Khi có gì đó lệch</a>.</p>
           </section>
 
           <section class="station" id="web">
             <span class="n" aria-hidden="true">5</span>
             <h2 class="h"><a href="#web"><span lang="en">See it in the browser</span><span lang="vi">Xem trên trình duyệt</span></a></h2>
-            <p class="intro" lang="en">The same projects in a browser, on your machine only. Each button runs one allowed acp command and shows the exact command it ran.</p>
-            <p class="intro" lang="vi">Cùng các project đó trong trình duyệt, chỉ chạy trên máy bạn. Mỗi nút chạy đúng một lệnh acp được cho phép và hiện chính xác lệnh đã chạy.</p>
+            <p class="intro" lang="en">A dashboard of the same projects, on your machine only. Each button runs one allowed acp command, and only from the preview you just read.</p>
+            <p class="intro" lang="vi">Một bảng điều khiển cho cùng các project đó, chỉ chạy trên máy bạn. Mỗi nút chạy đúng một lệnh acp được cho phép, và chỉ từ bản xem trước bạn vừa đọc.</p>
             <div class="term">
               <div class="cmd"><pre><code>acp web</code></pre><button type="button" class="copy"></button></div>
-              <div class="out"><p class="out-label"><span lang="en">You should see, and your browser opens it</span><span lang="vi">Kết quả mong đợi, trình duyệt tự mở địa chỉ này</span></p><pre>acp web: http://127.0.0.1:8780/#token=…</pre></div>
+              <div class="out"><p class="out-label"><span lang="en">You should see, and your browser opens the page signed in</span><span lang="vi">Kết quả mong đợi, trình duyệt tự mở trang đã đăng nhập</span></p><pre>acp web: http://127.0.0.1:8780 (Ctrl-C to stop)</pre></div>
             </div>
             <ul class="plain" lang="en">
-              <li>Click a project's status to see what is wrong and the dry run of what a sync would change.</li>
-              <li>"Sync" applies that plan. "Sync, thay bản cũ" also replaces old copied folders in worktrees with links, after backing them up; see <a href="#adopt">Worktrees with old copies</a>.</li>
-              <li>The skills drawer previews every change before Apply is enabled.</li>
-              <li>The web page itself is in Vietnamese for now.</li>
+              <li>Four parts: Overview with a Scan button, Projects &amp; Skills, AgentKit &amp; Runtimes, and Hooks, MCP &amp; Settings.</li>
+              <li>Every change opens a preview of what it will change and what it leaves alone. Apply is enabled only from that preview, and acp checks it again right before applying.</li>
+              <li>"Gom bản sao cũ" replaces old copied folders in worktrees with links, after backing them up; see <a href="#adopt">Worktrees with old copies</a>.</li>
+              <li>The sign-in code in the URL works once. If you lose the tab, stop <code class="w">acp web</code> and start it again.</li>
+              <li>The dashboard and the scan are in Vietnamese for now.</li>
             </ul>
             <ul class="plain" lang="vi">
-              <li>Bấm vào tình trạng của project để xem đang bị gì và bản dry run của những gì sync sẽ đổi.</li>
-              <li>"Sync" áp dụng kế hoạch đó. "Sync, thay bản cũ" còn thay các thư mục copy cũ trong worktree bằng link, sau khi đã sao lưu; xem <a href="#adopt">Worktree có bản copy cũ</a>.</li>
-              <li>Drawer skills xem trước mọi thay đổi rồi mới bật nút Áp dụng.</li>
+              <li>Bốn mục: Tổng quan có nút Quét, Dự án &amp; Skill, AgentKit &amp; Runtime, và Hook, MCP &amp; Cài đặt.</li>
+              <li>Mọi thay đổi mở bản xem trước: sẽ đổi gì và không đụng tới gì. Nút Áp dụng chỉ bật từ bản xem trước đó, và acp kiểm tra lại ngay trước khi áp dụng.</li>
+              <li>"Gom bản sao cũ" thay các thư mục copy cũ trong worktree bằng link, sau khi đã sao lưu; xem <a href="#adopt">Worktree có bản copy cũ</a>.</li>
+              <li>Mã đăng nhập trong URL chỉ dùng được một lần. Lỡ đóng tab thì dừng <code class="w">acp web</code> rồi chạy lại.</li>
             </ul>
           </section>
         </div>
@@ -568,71 +584,55 @@ acp sync my-app --adopt</code></pre><button type="button" class="copy"></button>
 
         <section class="topic" id="mcp">
           <h2 class="h"><a href="#mcp"><span lang="en">Connect an agent</span><span lang="vi">Kết nối agent</span></a></h2>
-          <p class="intro" lang="en">Ask your agent "which projects need a sync?" and it answers from <code>acp_status</code>. Ask it to add a skill and it shows you the manifest diff first, then applies it when you agree.</p>
-          <p class="intro" lang="vi">Hỏi agent "project nào cần sync?" và nó trả lời từ <code>acp_status</code>. Nhờ nó thêm một skill thì nó cho bạn xem diff của manifest trước, rồi mới áp dụng khi bạn đồng ý.</p>
+          <p class="intro" lang="en">Ask your agent "which projects need a sync?" and it answers from <code>acp_scan</code> and <code>acp_status</code>. Ask it to fix something and it shows you the preview and the exact command; you run it, or press Apply in <code class="w">acp web</code>.</p>
+          <p class="intro" lang="vi">Hỏi agent "project nào cần sync?" và nó trả lời từ <code>acp_scan</code> và <code>acp_status</code>. Nhờ nó sửa thì nó cho bạn xem bản xem trước và đúng lệnh cần chạy; bạn tự chạy lệnh đó, hoặc bấm Áp dụng trong <code class="w">acp web</code>.</p>
           <p lang="en">Connect once per machine. <code class="w">--scope user</code> makes acp available in every Claude Code project.</p>
           <p lang="vi">Mỗi máy chỉ cần kết nối một lần. <code class="w">--scope user</code> giúp acp có mặt trong mọi project của Claude Code.</p>
-          <div class="term"><div class="cmd"><pre><code>claude mcp add --scope user acp -- acp mcp
-codex mcp add acp -- acp mcp</code></pre><button type="button" class="copy"></button></div></div>
+          <div class="term"><div class="cmd"><pre><code>claude mcp add --scope user acp -- ~/.local/bin/acp mcp
+codex mcp add acp -- ~/.local/bin/acp mcp</code></pre><button type="button" class="copy"></button></div></div>
           <p lang="en">To confirm, run <code class="w">claude mcp list</code> or <code class="w">codex mcp list</code>. acp should be listed; Claude Code also shows it as connected.</p>
           <p lang="vi">Để kiểm tra, chạy <code class="w">claude mcp list</code> hoặc <code class="w">codex mcp list</code>. acp phải có trong danh sách; Claude Code còn hiện nó là đã kết nối.</p>
           <p lang="en">The server works on the control plane <code class="w">acp init</code> recorded. To point it elsewhere, pass <code>ACP_ROOT</code>: <code class="w">-e ACP_ROOT=/path</code> for Claude Code, <code class="w">--env ACP_ROOT=/path</code> for Codex. Any other MCP client can launch <code class="w">acp mcp</code> over stdio.</p>
           <p lang="vi">Server làm việc trên control plane mà <code class="w">acp init</code> đã ghi. Muốn trỏ chỗ khác, truyền <code>ACP_ROOT</code>: <code class="w">-e ACP_ROOT=/path</code> với Claude Code, <code class="w">--env ACP_ROOT=/path</code> với Codex. Client MCP khác cũng chạy được <code class="w">acp mcp</code> qua stdio.</p>
           <div class="aside">
-            <p lang="en"><b>Reads run, changes wait.</b> Tools that only read run straight away. Tools that change things return a preview unless the agent passes <code class="w">apply: true</code>, and your client still asks you before calls it is not allowed to make on its own. The full list is under <a href="#mcp-tools">MCP tools</a>.</p>
-            <p lang="vi"><b>Đọc thì chạy, đổi thì chờ.</b> Tool chỉ đọc chạy ngay. Tool có thay đổi trả về bản xem trước trừ khi agent truyền <code class="w">apply: true</code>, và client vẫn hỏi bạn trước những lần gọi nó không được tự làm. Danh sách đầy đủ ở mục <a href="#mcp-tools">Tool MCP</a>.</p>
-            <p lang="en"><b>No second agent.</b> A sync started over MCP never opens a separate repair agent. If it fails, the agent you are talking to sees the error and fixes it with you.</p>
-            <p lang="vi"><b>Không có agent thứ hai.</b> Sync gọi qua MCP không bao giờ mở thêm agent sửa lỗi. Nếu lỗi, chính agent đang nói chuyện với bạn thấy lỗi và cùng bạn sửa.</p>
+            <p lang="en"><b>Agents read, you apply.</b> All four tools only read or preview. No tool changes a file, so a busy agent cannot sync, relink or rewrite settings on its own. The list is under <a href="#mcp-tools">MCP tools</a>.</p>
+            <p lang="vi"><b>Agent đọc, bạn áp dụng.</b> Cả bốn tool chỉ đọc hoặc xem trước. Không tool nào đổi file, nên agent không tự sync, link lại hay sửa cài đặt được. Danh sách ở mục <a href="#mcp-tools">Tool MCP</a>.</p>
           </div>
         </section>
 
         <section class="topic" id="when-sync-fails">
-          <h2 class="h"><a href="#when-sync-fails"><span lang="en">When a sync fails</span><span lang="vi">Khi sync lỗi</span></a></h2>
-          <p class="intro" lang="en">From the terminal or the web page, a failed install is handed to Claude Code or Codex inside fixed limits. acp then checks the result itself.</p>
-          <p class="intro" lang="vi">Từ terminal hay trang web, một lần cài lỗi được giao cho Claude Code hoặc Codex trong các giới hạn cố định. Sau đó acp tự kiểm tra kết quả.</p>
-          <p lang="en">Example: you hand-edited <code>.claude/settings.json</code> in my-app, left it invalid, and <code class="w">acp sync my-app</code> fails.</p>
-          <p lang="vi">Ví dụ: bạn sửa tay <code>.claude/settings.json</code> trong my-app, để nó sai cú pháp, và <code class="w">acp sync my-app</code> lỗi.</p>
-          <ol class="flow">
-            <li lang="en"><span><b>Back up</b>my-app's agent folders and its entries in the manifest, paths and lock are copied to <code>runtime/fix-backups</code>.</span></li>
-            <li lang="vi"><span><b>Sao lưu</b>Thư mục agent của my-app cùng các mục của nó trong manifest, đường dẫn và lock được chép vào <code>runtime/fix-backups</code>.</span></li>
-            <li lang="en"><span><b>Repair</b>The agent reads the error, with secrets removed, repairs the JSON, and writes down the cause.</span></li>
-            <li lang="vi"><span><b>Sửa</b>Agent đọc lỗi (đã lược bỏ secret), sửa file JSON và ghi lại nguyên nhân.</span></li>
-            <li lang="en"><span><b>Check</b>acp checks the limits below, runs the sync again and checks the project's status.</span></li>
-            <li lang="vi"><span><b>Kiểm tra</b>acp soát các giới hạn bên dưới, chạy lại sync và kiểm tra tình trạng project.</span></li>
-          </ol>
-          <div class="outcomes">
-            <div class="outcome"><span class="state read"><span lang="en">Fixed</span><span lang="vi">Đã sửa</span></span>
-              <p lang="en">The re-run passed. acp prints <code class="w">fix &lt;op&gt;: fixed</code> with the cause, and <code class="w">acp fix show</code> lists every file the agent changed.</p>
-              <p lang="vi">Lần chạy lại đã qua. acp in <code class="w">fix &lt;op&gt;: fixed</code> kèm nguyên nhân, và <code class="w">acp fix show</code> liệt kê mọi file agent đã đổi.</p></div>
-            <div class="outcome"><span class="state change"><span lang="en">Gave up</span><span lang="vi">Dừng lại</span></span>
-              <p lang="en">Still failing after three attempts, or the cause is in the control plane or in <code>ak</code>, or it needs your decision. acp stops and writes <code>plans/reports/acp-fix-&lt;op&gt;-my-app.md</code>: the cause, where it is, and what it needs from you.</p>
-              <p lang="vi">Vẫn lỗi sau ba lần thử, hoặc nguyên nhân nằm ở control plane hay ở <code>ak</code>, hoặc cần bạn quyết định. acp dừng và viết <code>plans/reports/acp-fix-&lt;op&gt;-my-app.md</code>: nguyên nhân, nằm ở đâu và cần gì từ bạn.</p></div>
-            <div class="outcome"><span class="state risk"><span lang="en">Stopped</span><span lang="vi">Bị chặn</span></span>
-              <p lang="en">The agent changed something outside its limits. acp stops at once, puts the manifest back, and leaves the folders for you to restore with <code class="w">acp fix rollback</code>.</p>
-              <p lang="vi">Agent đã đổi thứ nằm ngoài giới hạn. acp dừng ngay, trả manifest về như cũ, và để bạn khôi phục các thư mục bằng <code class="w">acp fix rollback</code>.</p></div>
+          <h2 class="h"><a href="#when-sync-fails"><span lang="en">When something is off</span><span lang="vi">Khi có gì đó lệch</span></a></h2>
+          <p class="intro" lang="en">acp never repairs on its own. When a sync fails it stops and says why; <code class="w">acp scan</code> then tells you, in plain words, what is off and how to fix it.</p>
+          <p class="intro" lang="vi">acp không bao giờ tự sửa. Khi sync lỗi, nó dừng và nói lý do; sau đó <code class="w">acp scan</code> cho bạn biết bằng lời thường chỗ nào lệch và sửa thế nào.</p>
+          <div class="term">
+            <div class="cmd"><pre><code>acp scan</code></pre><button type="button" class="copy"></button></div>
+            <div class="out"><p class="out-label"><span lang="en">For example</span><span lang="vi">Ví dụ</span></p><pre>Hook, MCP &amp; Cài đặt  1 mục
+  [cần sửa] Chưa cài hook tự gắn skill cho worktree  acp_hook_missing
+    Xem trước bằng lệnh bên dưới, rồi chạy acp hooks install (có bản sao lưu).
+    xem trước: acp hooks install --dry-run
+chi tiết một mục: acp explain &lt;code&gt;</pre></div>
           </div>
+          <p lang="en">Scan only reads. It checks each project, each worktree and the shared pieces (hooks, MCP servers, global skills, <code>ak</code>), with a time limit for each. Every finding has a stable code and a level: <code>error</code>, <code>warn</code>, <code>decide</code> or <code>info</code>. When acp can fix it, the finding carries the command to preview first. <code class="w">acp scan --module projects</code> narrows it to one part.</p>
+          <p lang="vi">Scan chỉ đọc. Nó kiểm tra từng project, từng worktree và các phần dùng chung (hook, MCP server, skill dùng chung, <code>ak</code>), mỗi phần có giới hạn thời gian. Mỗi kết quả có mã cố định và mức độ: <code>error</code>, <code>warn</code>, <code>decide</code> hoặc <code>info</code>. Khi acp sửa được, kết quả kèm lệnh để xem trước. <code class="w">acp scan --module projects</code> chỉ quét một phần.</p>
+          <p lang="en"><code class="w">acp explain CODE</code> gives the four parts of a finding: what happened, why it matters, what happens if you leave it, and what to do, with the terms it uses.</p>
+          <p lang="vi"><code class="w">acp explain CODE</code> cho đủ bốn phần của một kết quả: chuyện gì, vì sao quan trọng, nếu bỏ qua thì sao, và nên làm gì, kèm giải thích thuật ngữ.</p>
           <div class="limits">
             <section>
-              <h4><span lang="en">The agent may change</span><span lang="vi">Agent được phép đổi</span></h4>
-              <ul lang="en"><li>The project's <code>.claude</code>, <code>.agents</code>, <code>.codex</code> and <code>.agentkit</code> folders</li><li>That project's manifest, path and lock entries</li></ul>
-              <ul lang="vi"><li>Các thư mục <code>.claude</code>, <code>.agents</code>, <code>.codex</code>, <code>.agentkit</code> của project</li><li>Manifest, đường dẫn và mục lock của project đó</li></ul>
+              <h4><span lang="en">acp may change</span><span lang="vi">acp được phép đổi</span></h4>
+              <ul lang="en"><li>Links it made, which it records in each checkout's ledger</li><li>AgentKit's own files, through <code>ak</code></li><li>Settings files, after a backup in <code>runtime/backups</code></li></ul>
+              <ul lang="vi"><li>Các link do nó tạo, đã ghi trong ledger của mỗi checkout</li><li>File riêng của AgentKit, qua <code>ak</code></li><li>File cài đặt, sau khi sao lưu vào <code>runtime/backups</code></li></ul>
             </section>
             <section>
-              <h4><span lang="en">The agent never</span><span lang="vi">Agent không bao giờ</span></h4>
-              <ul lang="en"><li>Removes a skill or a target</li><li>Switches kit or channel</li><li>Edits the control plane's <code>skills/</code>, <code>hooks/</code> or <code>scripts/</code></li><li>Touches other files in your repo</li></ul>
-              <ul lang="vi"><li>Gỡ một skill hay một target</li><li>Đổi kit hoặc kênh</li><li>Sửa <code>skills/</code>, <code>hooks/</code>, <code>scripts/</code> của control plane</li><li>Đụng tới file khác trong repo của bạn</li></ul>
+              <h4><span lang="en">acp never</span><span lang="vi">acp không bao giờ</span></h4>
+              <ul lang="en"><li>Removes or replaces a path git tracks</li><li>Replaces a real folder or a link it did not make</li><li>Starts a second agent to repair things</li></ul>
+              <ul lang="vi"><li>Gỡ hay thay một path git đang theo dõi</li><li>Thay một thư mục thật hay một link không do nó tạo</li><li>Mở thêm agent để tự sửa</li></ul>
             </section>
           </div>
-          <h3 id="undo"><a href="#undo"><span lang="en">Look back and undo</span><span lang="vi">Xem lại và hoàn tác</span></a></h3>
-          <p lang="en">Every repair keeps its backup, its diff and the agent's transcript. Take the session id from <code class="w">acp fix list</code>:</p>
-          <p lang="vi">Mỗi lần sửa đều giữ bản sao lưu, diff và transcript của agent. Lấy mã phiên từ <code class="w">acp fix list</code>:</p>
-          <div class="term"><div class="cmd"><pre><code>acp fix list
-acp fix show &lt;op&gt; --transcript
-acp fix rollback &lt;op&gt;          <span class="c"># shows what it would restore</span>
-acp fix rollback &lt;op&gt; --yes</code></pre><button type="button" class="copy"></button></div></div>
-          <h3 id="fix-settings"><a href="#fix-settings"><span lang="en">Choose the agent</span><span lang="vi">Chọn agent</span></a></h3>
-          <p lang="en"><code class="w">acp fix config --target codex --runner direct</code> picks the agent. <code>direct</code> runs it on your Claude or Codex subscription; <code>ak-run</code> uses <code class="w">ak run</code> with an API key. Skip repairs for one run with <code>--no-fix</code>, or turn them off with <code class="w">acp fix config --auto off</code>.</p>
-          <p lang="vi"><code class="w">acp fix config --target codex --runner direct</code> chọn agent. <code>direct</code> chạy bằng subscription Claude hoặc Codex của bạn; <code>ak-run</code> dùng <code class="w">ak run</code> với API key. Bỏ qua tự sửa cho một lần chạy bằng <code>--no-fix</code>, hoặc tắt hẳn bằng <code class="w">acp fix config --auto off</code>.</p>
+          <h3 id="undo"><a href="#undo"><span lang="en">Undo acp in a checkout</span><span lang="vi">Gỡ những gì acp làm trong một checkout</span></a></h3>
+          <p lang="en"><code class="w">acp unlink PATH</code> removes the links acp made in that checkout, its exclude file and its ledger. <code class="w">acp remove ID</code> takes a whole project out of the fleet; without <code>--yes</code> it only shows what it would do.</p>
+          <p lang="vi"><code class="w">acp unlink PATH</code> gỡ các link acp đã tạo trong checkout đó, cùng file exclude và ledger của nó. <code class="w">acp remove ID</code> đưa cả project ra khỏi fleet; không có <code>--yes</code> thì nó chỉ hiện những gì sẽ làm.</p>
+          <div class="term"><div class="cmd"><pre><code>acp unlink ~/code/my-app-feature --dry-run
+acp remove my-app</code></pre><button type="button" class="copy"></button></div></div>
         </section>
 
         <h2 class="part" id="reference"><span lang="en">Reference</span><span lang="vi">Tra cứu</span></h2>
@@ -645,7 +645,8 @@ acp fix rollback &lt;op&gt; --yes</code></pre><button type="button" class="copy"
             <thead><tr><th lang="en">Command</th><th lang="vi">Lệnh</th><th lang="en">Does</th><th lang="vi">Làm gì</th><th lang="en">Preview with</th><th lang="vi">Xem trước bằng</th></tr></thead>
             <tbody>
               <tr><td><code>acp</code>, <code class="w">acp doctor</code></td><td lang="en">Status of every project; doctor exits 1 on drift</td><td lang="vi">Tình trạng mọi project; doctor trả mã 1 khi lệch</td><td>–</td></tr>
-              <tr><td><code class="w">acp init DIR</code></td><td lang="en">Create a control plane</td><td lang="vi">Tạo control plane</td><td><code>--dry-run</code></td></tr>
+              <tr><td><code class="w">acp init [--root DIR]</code></td><td lang="en">Create or adopt a control plane</td><td lang="vi">Tạo hoặc nhận control plane</td><td><code>--dry-run</code></td></tr>
+              <tr><td><code class="w">acp new PATH</code></td><td lang="en">Create or git init a project, add it and install AgentKit</td><td lang="vi">Tạo hoặc git init một project, thêm vào fleet và cài AgentKit</td><td><code>--dry-run</code></td></tr>
               <tr><td><code class="w">acp add PATH</code></td><td lang="en">Add a repo and sync it</td><td lang="vi">Thêm repo và sync</td><td><code>--dry-run</code></td></tr>
               <tr><td><code class="w">acp remove ID</code></td><td lang="en">Take a repo out and drop acp's links</td><td lang="vi">Gỡ repo và bỏ các link của acp</td><td lang="en">default; <code>--yes</code> runs it</td><td lang="vi">mặc định; <code>--yes</code> để chạy</td></tr>
               <tr><td><code class="w">acp sync [ID…] [--all]</code></td><td lang="en">AgentKit, personal links, worktree links</td><td lang="vi">AgentKit, link cá nhân, link worktree</td><td><code>--dry-run</code></td></tr>
@@ -653,12 +654,14 @@ acp fix rollback &lt;op&gt; --yes</code></pre><button type="button" class="copy"
               <tr><td><code class="w">acp kit add ID</code></td><td lang="en">Give a project AgentKit</td><td lang="vi">Thêm AgentKit cho project</td><td lang="en">default; <code>--apply</code> runs it</td><td lang="vi">mặc định; <code>--apply</code> để chạy</td></tr>
               <tr><td><code class="w">acp upgrade</code></td><td lang="en">Update ak, pin the latest kit, sync all</td><td lang="vi">Cập nhật ak, ghim kit mới nhất, sync tất cả</td><td><code>--dry-run</code></td></tr>
               <tr><td><code class="w">acp link [PATH]</code></td><td lang="en">Link one checkout without touching AgentKit</td><td lang="vi">Link một checkout, không động tới AgentKit</td><td><code>--check</code></td></tr>
-              <tr><td><code class="w">acp hooks install</code></td><td lang="en">Link new worktrees when a session starts</td><td lang="vi">Tự link worktree mới khi phiên bắt đầu</td><td><code>--dry-run</code></td></tr>
+              <tr><td><code class="w">acp unlink [PATH]</code></td><td lang="en">Remove the links acp made in one checkout</td><td lang="vi">Gỡ các link acp đã tạo trong một checkout</td><td><code>--dry-run</code></td></tr>
+              <tr><td><code class="w">acp hooks install|uninstall</code></td><td lang="en">Link new worktrees when a session starts</td><td lang="vi">Tự link worktree mới khi phiên bắt đầu</td><td><code>--dry-run</code></td></tr>
               <tr><td><code class="w">acp global</code></td><td lang="en">Link global skills into your home folders</td><td lang="vi">Link skill dùng chung vào thư mục home</td><td><code>--check</code></td></tr>
-              <tr><td><code class="w">acp fix list|show|rollback|config|run</code></td><td lang="en">Repair sessions</td><td lang="vi">Các phiên sửa lỗi</td><td lang="en">see <a href="#undo">undo</a></td><td lang="vi">xem <a href="#undo">hoàn tác</a></td></tr>
+              <tr><td><code class="w">acp scan</code>, <code class="w">acp explain CODE</code></td><td lang="en">Read-only health check, and what a finding means</td><td lang="vi">Kiểm tra chỉ đọc, và ý nghĩa của một kết quả</td><td>–</td></tr>
               <tr><td><code class="w">acp setup</code></td><td lang="en">Check, install or sign in to ak</td><td lang="vi">Kiểm tra, cài hoặc đăng nhập ak</td><td lang="en">plan until <code>--apply</code></td><td lang="vi">kế hoạch cho tới <code>--apply</code></td></tr>
               <tr><td><code class="w">acp activity</code></td><td lang="en">Repos with agent sessions in the last 30 days</td><td lang="vi">Repo có phiên agent trong 30 ngày qua</td><td>–</td></tr>
-              <tr><td><code class="w">acp web</code>, <code class="w">acp mcp</code></td><td lang="en">Local web page, and the MCP server</td><td lang="vi">Trang web cục bộ, và MCP server</td><td>–</td></tr>
+              <tr><td><code class="w">acp web</code>, <code class="w">acp mcp</code></td><td lang="en">Local dashboard, and the read-only MCP server</td><td lang="vi">Bảng điều khiển cục bộ, và MCP server chỉ đọc</td><td>–</td></tr>
+              <tr><td><code class="w">acp describe</code></td><td lang="en">Every command's contract, for scripts and agents</td><td lang="vi">Contract của mọi lệnh, cho script và agent</td><td>–</td></tr>
             </tbody>
           </table></div>
         </section>
@@ -668,17 +671,10 @@ acp fix rollback &lt;op&gt; --yes</code></pre><button type="button" class="copy"
           <div class="table"><table>
             <thead><tr><th>Tool</th><th lang="en">Does</th><th lang="vi">Làm gì</th><th lang="en">Effect</th><th lang="vi">Tác động</th></tr></thead>
             <tbody>
+              <tr><td><code>acp_scan</code></td><td lang="en">The health check, optionally for one part</td><td lang="vi">Kiểm tra sức khỏe, có thể chỉ một phần</td><td><span class="state read"><span lang="en">Reads</span><span lang="vi">Chỉ đọc</span></span></td></tr>
               <tr><td><code>acp_status</code></td><td lang="en">Every project and what drifted</td><td lang="vi">Mọi project và chỗ đang lệch</td><td><span class="state read"><span lang="en">Reads</span><span lang="vi">Chỉ đọc</span></span></td></tr>
-              <tr><td><code>acp_project_skills</code></td><td lang="en">A project's skills and what it could add</td><td lang="vi">Skill của một project và những gì có thể thêm</td><td><span class="state read"><span lang="en">Reads</span><span lang="vi">Chỉ đọc</span></span></td></tr>
-              <tr><td><code>acp_sync_plan</code></td><td lang="en">What a sync would change, per worktree</td><td lang="vi">Sync sẽ đổi gì, theo từng worktree</td><td><span class="state read"><span lang="en">Reads</span><span lang="vi">Chỉ đọc</span></span></td></tr>
-              <tr><td><code>acp_sync</code></td><td lang="en">Sync one project, optionally adopting old copies</td><td lang="vi">Sync một project, có thể thay bản copy cũ</td><td><span class="state change"><span lang="en">Changes</span><span lang="vi">Thay đổi</span></span></td></tr>
-              <tr><td><code>acp_skills_set</code></td><td lang="en">Add or remove skills</td><td lang="vi">Thêm hoặc bỏ skill</td><td><span class="state change"><span lang="en">Preview, then changes</span><span lang="vi">Xem trước rồi mới đổi</span></span></td></tr>
-              <tr><td><code>acp_kit_add</code></td><td lang="en">Give a project AgentKit</td><td lang="vi">Thêm AgentKit cho project</td><td><span class="state change"><span lang="en">Preview, then changes</span><span lang="vi">Xem trước rồi mới đổi</span></span></td></tr>
-              <tr><td><code>acp_add_project</code></td><td lang="en">Register a repo and sync it</td><td lang="vi">Đăng ký một repo và sync</td><td><span class="state change"><span lang="en">Preview, then changes</span><span lang="vi">Xem trước rồi mới đổi</span></span></td></tr>
-              <tr><td><code>acp_upgrade</code></td><td lang="en">Pin the latest kit and sync every project</td><td lang="vi">Ghim kit mới nhất và sync mọi project</td><td><span class="state change"><span lang="en">Preview, then changes</span><span lang="vi">Xem trước rồi mới đổi</span></span></td></tr>
-              <tr><td><code>acp_fix_sessions</code>, <code>acp_fix_show</code></td><td lang="en">Repair sessions and their diffs</td><td lang="vi">Các phiên sửa lỗi và diff của chúng</td><td><span class="state read"><span lang="en">Reads</span><span lang="vi">Chỉ đọc</span></span></td></tr>
-              <tr><td><code>acp_fix_rollback</code></td><td lang="en">Restore what a repair changed</td><td lang="vi">Khôi phục những gì phiên sửa đã đổi</td><td><span class="state risk"><span lang="en">Preview, then restores</span><span lang="vi">Xem trước rồi khôi phục</span></span></td></tr>
-              <tr><td><code>acp_setup</code>, <code>acp_describe</code></td><td lang="en">The ak CLI, and the command contract</td><td lang="vi">CLI ak, và contract của các lệnh</td><td><span class="state read"><span lang="en">Reads</span><span lang="vi">Chỉ đọc</span></span></td></tr>
+              <tr><td><code>acp_explain</code></td><td lang="en">What a finding code means</td><td lang="vi">Ý nghĩa của một mã kết quả</td><td><span class="state read"><span lang="en">Reads</span><span lang="vi">Chỉ đọc</span></span></td></tr>
+              <tr><td><code>acp_fix_preview</code></td><td lang="en">The dry run of a finding's fix, and the command a person runs to apply it</td><td lang="vi">Bản chạy thử của cách sửa một kết quả, và lệnh để người dùng tự áp dụng</td><td><span class="state read"><span lang="en">Previews</span><span lang="vi">Chỉ xem trước</span></span></td></tr>
             </tbody>
           </table></div>
         </section>
@@ -693,12 +689,13 @@ acp fix rollback &lt;op&gt; --yes</code></pre><button type="button" class="copy"
               <tr><td><code>agentkit-releases.lock.json</code></td><td lang="en">The AgentKit version pinned for each channel.</td><td lang="vi">Phiên bản AgentKit được ghim cho mỗi kênh.</td></tr>
               <tr><td><code>skills/</code></td><td lang="en">Your own skills, one folder each.</td><td lang="vi">Skill của riêng bạn, mỗi skill một thư mục.</td></tr>
               <tr><td><code>global-skills.json</code></td><td lang="en">Skills linked into your home folders for every session.</td><td lang="vi">Skill được link vào thư mục home, dùng cho mọi phiên.</td></tr>
-              <tr><td><code>runtime/</code></td><td lang="en">Backups, repair sessions and settings. Ignored by git.</td><td lang="vi">Bản sao lưu, phiên sửa lỗi và cài đặt. Git bỏ qua.</td></tr>
-              <tr><td><code>plans/reports/</code></td><td lang="en">Reports from repairs that stopped. Ignored by git.</td><td lang="vi">Báo cáo của các lần sửa phải dừng. Git bỏ qua.</td></tr>
+              <tr><td><code>runtime/</code></td><td lang="en">Backups, locks and downloaded installers. Ignored by git.</td><td lang="vi">Bản sao lưu, lock và installer đã tải. Git bỏ qua.</td></tr>
+              <tr><td><code>&lt;git-dir&gt;/acp-links.json</code></td><td lang="en">In each checkout: the links acp made there, so it can remove exactly those.</td><td lang="vi">Trong mỗi checkout: các link acp đã tạo ở đó, để gỡ đúng những link đó.</td></tr>
+              <tr><td><code>&lt;git-dir&gt;/acp-exclude</code></td><td lang="en">In each worktree: hides acp's links from <code>git status</code> in that worktree only.</td><td lang="vi">Trong mỗi worktree: ẩn link của acp khỏi <code>git status</code>, chỉ trong worktree đó.</td></tr>
             </tbody>
           </table></div>
-          <p lang="en">acp finds the control plane from <code>$ACP_ROOT</code>, then the nearest folder above the current one that holds <code>agentkit-releases.lock.json</code> and <code>projects/</code>, then the default <code class="w">acp init</code> recorded.</p>
-          <p lang="vi">acp tìm control plane theo thứ tự: <code>$ACP_ROOT</code>, rồi thư mục cha gần nhất có <code>agentkit-releases.lock.json</code> và <code>projects/</code>, rồi mặc định mà <code class="w">acp init</code> đã ghi.</p>
+          <p lang="en">acp finds the control plane from <code>$ACP_ROOT</code>, then the git checkout you are in when it is a control plane with <code>projects.local.json</code>, then the root <code class="w">acp init</code> recorded, then <code>~/agent-control-plane</code>.</p>
+          <p lang="vi">acp tìm control plane theo thứ tự: <code>$ACP_ROOT</code>, rồi checkout git bạn đang đứng nếu nó là control plane có <code>projects.local.json</code>, rồi root mà <code class="w">acp init</code> đã ghi, rồi <code>~/agent-control-plane</code>.</p>
         </section>
 
         <section class="topic" id="json">
@@ -717,10 +714,11 @@ acp fix rollback &lt;op&gt; --yes</code></pre><button type="button" class="copy"
             <thead><tr><th lang="en">Variable</th><th lang="vi">Biến</th><th lang="en">Effect</th><th lang="vi">Tác dụng</th></tr></thead>
             <tbody>
               <tr><td><code>ACP_ROOT</code></td><td lang="en">The control plane to use, ahead of any other</td><td lang="vi">Control plane cần dùng, ưu tiên hơn mọi cách tìm khác</td></tr>
-              <tr><td><code>ACP_FIX=off</code></td><td lang="en">Never start a repair agent</td><td lang="vi">Không bao giờ mở agent sửa lỗi</td></tr>
-              <tr><td><code>ACP_FIX_TARGET</code>, <code>ACP_FIX_RUNNER</code></td><td lang="en">Override the repair agent and runner</td><td lang="vi">Đổi agent sửa lỗi và cách chạy</td></tr>
-              <tr><td><code>ACP_FIX_ATTEMPTS</code>, <code>ACP_FIX_TIMEOUT</code></td><td lang="en">Attempts (default 3) and seconds per attempt (default 900)</td><td lang="vi">Số lần thử (mặc định 3) và số giây mỗi lần (mặc định 900)</td></tr>
-              <tr><td><code>XDG_CONFIG_HOME</code></td><td lang="en">Where the default control plane is recorded (<code>acp/config.json</code>)</td><td lang="vi">Nơi lưu control plane mặc định (<code>acp/config.json</code>)</td></tr>
+              <tr><td><code>ACP_BIN</code></td><td lang="en">The acp binary the session hook runs</td><td lang="vi">Binary acp mà session hook gọi</td></tr>
+              <tr><td><code>ACP_AK</code></td><td lang="en">The <code>ak</code> binary to use, ahead of <code>PATH</code></td><td lang="vi">Binary <code>ak</code> cần dùng, ưu tiên hơn <code>PATH</code></td></tr>
+              <tr><td><code>ACP_GIT_TIMEOUT</code>, <code>ACP_AK_TIMEOUT</code></td><td lang="en">Limit for one git call (default 30s) and one ak call (default 15m)</td><td lang="vi">Giới hạn cho một lần gọi git (mặc định 30s) và một lần gọi ak (mặc định 15m)</td></tr>
+              <tr><td><code>ACP_INSTALL_DIR</code>, <code>ACP_VERSION</code>, <code>ACP_NO_INIT</code></td><td lang="en">For the installer: where to put acp, which tag, and skipping init</td><td lang="vi">Cho installer: đặt acp ở đâu, tag nào, và bỏ bước init</td></tr>
+              <tr><td><code>XDG_CONFIG_HOME</code></td><td lang="en">Where the default control plane is recorded (<code>acp/root</code>)</td><td lang="vi">Nơi ghi control plane mặc định (<code>acp/root</code>)</td></tr>
             </tbody>
           </table></div>
         </section>
@@ -735,7 +733,8 @@ acp fix rollback &lt;op&gt; --yes</code></pre><button type="button" class="copy"
               <tr><td>worktree</td><td lang="en">An extra git checkout of the same repo. acp links its agent files to the main checkout.</td><td lang="vi">Một checkout git phụ của cùng repo. acp link file agent của nó về checkout chính.</td></tr>
               <tr><td>sync</td><td lang="en">Make a repo and its worktrees match the manifest.</td><td lang="vi">Làm cho repo và các worktree khớp với manifest.</td></tr>
               <tr><td>adopt</td><td lang="en">Back up an old copied folder in a worktree and replace it with a link.</td><td lang="vi">Sao lưu thư mục copy cũ trong worktree rồi thay bằng link.</td></tr>
-              <tr><td>fix session</td><td lang="en">One repair of a failed sync by a coding agent, with its backup and diff.</td><td lang="vi">Một lần coding agent sửa sync lỗi, kèm bản sao lưu và diff.</td></tr>
+              <tr><td>finding</td><td lang="en">One thing <code>acp scan</code> noticed, with a code, a level and how to fix it.</td><td lang="vi">Một điều <code>acp scan</code> nhận ra, có mã, mức độ và cách sửa.</td></tr>
+              <tr><td>preview</td><td lang="en">What a change would do, shown before anything is written.</td><td lang="vi">Những gì một thay đổi sẽ làm, hiện ra trước khi ghi bất cứ thứ gì.</td></tr>
             </tbody>
           </table></div>
         </section>
@@ -756,11 +755,11 @@ acp fix rollback &lt;op&gt; --yes</code></pre><button type="button" class="copy"
 const COPY = { en: ["Copy", "Copied", "Select and copy"], vi: ["Chép", "Đã chép", "Hãy bôi đen để chép"] };
 const YARD = {
   en: { start: "Illustration: <code>acp sync --all</code>", sync: (n) => `Syncing ${n}…`,
-        fail: "api/refactor failed: an old copy blocks the link.", fixing: "A repair agent is fixing api/refactor…",
-        done: "Every checkout matches the pinned AgentKit.", fixed: " (repaired)", count: (a, b) => `${a}/${b} in step` },
+        fail: "api/refactor failed: an old copy blocks the link.", fixing: "Adopting api/refactor: backing up the old copy and linking…",
+        done: "Every checkout matches the pinned AgentKit.", fixed: " (adopted)", count: (a, b) => `${a}/${b} in step` },
   vi: { start: "Minh họa: <code>acp sync --all</code>", sync: (n) => `Đang sync ${n}…`,
-        fail: "api/refactor lỗi: một bản copy cũ chặn link.", fixing: "Agent sửa lỗi đang xử lý api/refactor…",
-        done: "Mọi checkout đã khớp bản AgentKit đã ghim.", fixed: " (đã sửa)", count: (a, b) => `${a}/${b} đã khớp` },
+        fail: "api/refactor lỗi: một bản copy cũ chặn link.", fixing: "Đang gom api/refactor: sao lưu bản copy cũ rồi link…",
+        done: "Mọi checkout đã khớp bản AgentKit đã ghim.", fixed: " (đã gom)", count: (a, b) => `${a}/${b} đã khớp` },
 };
 const root = document.documentElement;
 let lang = "en";
@@ -825,7 +824,7 @@ for (const b of document.querySelectorAll(".copy")) {
 
 // ------------------------------------------------------- the track diagram
 // Each sync sets a route from the control plane to one checkout, turns its lamp,
-// then releases the route. api/refactor fails once and is repaired.
+// then releases the route. api/refactor is blocked once by an old copy, and adopted.
 const ORDER = ["my-app", "my-app/feature-login", "my-app/fix-cache", "api", "api/refactor", "docs"];
 const lampOf = (name) => document.querySelector(`[data-lamp="${name}"]`);
 const routeOf = (name) => document.querySelector(`[data-route="${name}"]`);

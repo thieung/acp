@@ -1,0 +1,407 @@
+{
+  "codes": {
+    "repo_missing": {
+      "title": "Không tìm thấy thư mục của dự án {project}",
+      "what": "acp có dự án {project} trong danh sách, nhưng trên máy này không có thư mục {repo}.",
+      "why": "Không có thư mục thì acp không thể gắn skill hay kiểm tra AgentKit cho dự án này.",
+      "ignore": "Các dự án khác vẫn chạy bình thường; riêng {project} sẽ luôn báo lỗi.",
+      "todo": "Nếu dự án đã chuyển chỗ, chạy acp add <đường dẫn mới> --id {project}. Nếu không dùng nữa, chạy acp remove {project} (xem trước), rồi acp remove {project} --yes.",
+      "glossary": []
+    },
+    "kit_not_installed": {
+      "title": "AgentKit {kit} chưa được cài cho {project} ({target})",
+      "what": "Dự án {project} cần AgentKit {kit} bản {pin} cho {target}, nhưng trong dự án chưa có bản nào.",
+      "why": "Thiếu AgentKit thì trợ lý AI trong dự án không có các skill và agent mà bạn đã chọn.",
+      "ignore": "Trợ lý vẫn chạy, nhưng thiếu các skill của AgentKit.",
+      "todo": "Xem trước bằng lệnh bên dưới, rồi chạy acp sync {project} để cài.",
+      "glossary": [
+        "AgentKit",
+        "skill"
+      ]
+    },
+    "kit_outdated": {
+      "title": "AgentKit {kit} của {project} ({target}) chưa đúng phiên bản",
+      "what": "Dự án đang có AgentKit {kit} {installed}, còn bản được chọn cho cả nhóm dự án là {pin}.",
+      "why": "Các dự án dùng bản khác nhau thì skill có thể chạy khác nhau, khó biết lỗi đến từ đâu.",
+      "ignore": "Dự án vẫn dùng được bản cũ, nhưng sẽ lệch dần so với các dự án khác.",
+      "todo": "Chạy acp sync {project} để chuyển sang bản {pin}.",
+      "glossary": [
+        "AgentKit"
+      ]
+    },
+    "selection_drift": {
+      "title": "Danh sách skill AgentKit {kit} của {project} ({target}) chưa khớp",
+      "what": "Bạn đã đổi danh sách skill AgentKit của {project}, nhưng bản cài trong dự án vẫn theo danh sách cũ.",
+      "why": "Trợ lý có thể còn skill bạn đã bỏ, hoặc thiếu skill bạn mới thêm.",
+      "ignore": "Lựa chọn mới của bạn chưa có hiệu lực.",
+      "todo": "Chạy acp sync {project} để cài lại theo danh sách mới.",
+      "glossary": [
+        "AgentKit",
+        "skill"
+      ]
+    },
+    "kit_files_missing": {
+      "title": "AgentKit {kit} của {project} ({target}) thiếu {count} tệp",
+      "what": "AgentKit đã ghi nhận các tệp này là của {kit}, nhưng {count} tệp không còn trong dự án, ví dụ {example}. Phiên bản vẫn đúng nên nhìn số phiên bản thì không thấy.",
+      "why": "Skill, agent hoặc hook thiếu tệp sẽ không chạy, hoặc trợ lý gọi tới một thứ không còn. Chuyện này hay xảy ra sau khi gỡ một kit khác đang dùng chung tệp.",
+      "ignore": "Những phần thiếu tệp vẫn hỏng cho tới khi AgentKit ghi lại chúng.",
+      "todo": "Chạy acp sync {project}: acp sẽ làm mới AgentKit {kit} ở cùng phiên bản để ghi lại các tệp thiếu.",
+      "glossary": [
+        "AgentKit",
+        "skill",
+        "hook"
+      ]
+    },
+    "personal_skill_missing": {
+      "title": "Không tìm thấy skill cá nhân {skill}",
+      "what": "Dự án {project} dùng skill {skill}, nhưng trong thư mục skills/ của control plane không có skill này.",
+      "why": "acp không thể gắn một skill không tồn tại.",
+      "ignore": "Trợ lý trong dự án sẽ thiếu skill này.",
+      "todo": "Thêm lại thư mục skills/{skill} (có SKILL.md), hoặc bỏ skill khỏi dự án bằng lệnh bên dưới (xem trước rồi mới áp dụng).",
+      "glossary": [
+        "skill"
+      ]
+    },
+    "personal_link_missing": {
+      "title": "{count} liên kết skill trong {project} cần cập nhật",
+      "what": "Trong thư mục chính của {project} có {count} liên kết skill cần thêm hoặc gỡ để đúng với lựa chọn của bạn.",
+      "why": "Trợ lý chỉ thấy những skill đã được gắn vào dự án.",
+      "ignore": "Trợ lý có thể thiếu skill bạn đã chọn, hoặc còn skill bạn đã bỏ.",
+      "todo": "Xem trước bằng lệnh bên dưới, rồi chạy acp link {checkout}.",
+      "glossary": [
+        "skill",
+        "liên kết"
+      ]
+    },
+    "real_dir_blocks_link": {
+      "title": "Một thư mục thật đang chiếm chỗ của skill",
+      "what": "Ở {path} đã có một thư mục thật, nên acp không gắn skill vào đó.",
+      "why": "acp không bao giờ ghi đè thư mục thật, vì có thể đó là việc bạn đang làm dở.",
+      "ignore": "Dự án dùng thư mục thật đó thay cho skill chung.",
+      "todo": "Nếu thư mục đó là bản cũ không cần nữa, hãy tự chuyển nó đi chỗ khác rồi chạy acp link {checkout}. Nếu bạn cố ý giữ nó, cứ để nguyên.",
+      "glossary": [
+        "skill"
+      ]
+    },
+    "foreign_link": {
+      "title": "Một liên kết không phải do acp tạo",
+      "what": "Ở {path} có một liên kết trỏ ra ngoài control plane và ngoài dự án, nên acp không đụng tới.",
+      "why": "acp chỉ sửa những liên kết do chính nó tạo, để không phá thiết lập của người khác.",
+      "ignore": "Liên kết đó vẫn được giữ nguyên.",
+      "todo": "Nếu liên kết đó không còn cần, hãy tự gỡ nó rồi chạy acp link {checkout}.",
+      "glossary": [
+        "liên kết"
+      ]
+    },
+    "worktree_unlinked": {
+      "title": "Worktree {worktree} chưa được gắn skill",
+      "what": "Worktree này thiếu {count} liên kết tới skill và tệp cấu hình của thư mục chính.",
+      "why": "Mở trợ lý trong worktree này thì nó không có các skill mà dự án đang dùng.",
+      "ignore": "Trợ lý trong worktree chạy thiếu skill cho tới lần mở phiên tiếp theo (nếu hook đã cài).",
+      "todo": "Xem trước bằng lệnh bên dưới, rồi chạy acp link {worktree}.",
+      "glossary": [
+        "worktree",
+        "skill",
+        "liên kết",
+        "hook"
+      ]
+    },
+    "old_copy_shadows_main": {
+      "title": "Bản sao cũ trong worktree che bản của thư mục chính",
+      "what": "Trong worktree {worktree}, {path} là một bản sao cũ khác với bản trong thư mục chính.",
+      "why": "Trợ lý trong worktree sẽ dùng bản cũ đó thay vì bản mới nhất.",
+      "ignore": "Worktree tiếp tục dùng bản cũ.",
+      "todo": "Lệnh bên dưới cất bản cũ vào runtime/backups rồi thay bằng liên kết tới bản mới. Xem trước trước khi chạy.",
+      "glossary": [
+        "worktree",
+        "bản sao lưu",
+        "liên kết"
+      ]
+    },
+    "tracked_agent_files_changed": {
+      "title": "Tệp cấu hình AI được Git theo dõi đã bị đổi",
+      "what": "Trong {checkout} có {count} tệp cấu hình của trợ lý (được Git theo dõi) đã bị xóa, sửa hoặc đổi loại.",
+      "why": "Những tệp này thuộc về dự án; nếu commit nhầm, cả nhóm sẽ nhận thay đổi đó.",
+      "ignore": "Thay đổi vẫn nằm đó và có thể bị commit lúc nào không hay.",
+      "todo": "Mở Git (git status) xem các tệp được liệt kê. Nếu là thay đổi ngoài ý muốn, khôi phục chúng; nếu là cố ý, commit như bình thường. acp không tự sửa trường hợp này.",
+      "glossary": [
+        "Git",
+        "commit"
+      ]
+    },
+    "untracked_acp_links": {
+      "title": "Git đang hiện các liên kết của acp trong {worktree}",
+      "what": "Git trong worktree này liệt kê {count} liên kết do acp tạo như tệp mới chưa theo dõi.",
+      "why": "Dễ commit nhầm các liên kết đó vào nhánh.",
+      "ignore": "git status sẽ luôn có các dòng này.",
+      "todo": "Chạy acp link {worktree} để acp ẩn lại các liên kết khỏi git status.",
+      "glossary": [
+        "Git",
+        "worktree",
+        "commit",
+        "liên kết"
+      ]
+    },
+    "exclude_conflict": {
+      "title": "acp không thể ẩn liên kết khỏi git status ở {checkout}",
+      "what": "Thư mục này đã có thiết lập Git riêng ({reason}), nên acp không thay đổi nó.",
+      "why": "Các liên kết của acp sẽ hiện trong git status của thư mục này.",
+      "ignore": "Không hỏng gì, chỉ là git status có thêm vài dòng.",
+      "todo": "Nếu muốn ẩn, thêm các đường dẫn đó vào tệp excludes của bạn. Nếu chấp nhận được, cứ để nguyên.",
+      "glossary": [
+        "Git",
+        "liên kết"
+      ]
+    },
+    "project_not_tracked": {
+      "title": "Bạn hay làm việc ở {repo} nhưng nó chưa có trong acp",
+      "what": "Trong 30 ngày qua có {sessions} phiên Claude Code hoặc Codex ở {repo}, nhưng dự án này chưa nằm trong danh sách của acp.",
+      "why": "Dự án ngoài danh sách sẽ không nhận skill chung và AgentKit đúng phiên bản.",
+      "ignore": "Dự án vẫn chạy như hiện tại, chỉ là acp không quản lý nó.",
+      "todo": "Xem trước bằng lệnh bên dưới, rồi chạy acp add {repo}.",
+      "glossary": [
+        "Claude Code",
+        "Codex",
+        "skill",
+        "AgentKit"
+      ]
+    },
+    "ak_missing": {
+      "title": "Máy này chưa cài công cụ ak",
+      "what": "acp cần công cụ ak để cài và cập nhật AgentKit, nhưng không tìm thấy nó.",
+      "why": "Không có ak thì các dự án dùng AgentKit không cài hay cập nhật được.",
+      "ignore": "Liên kết skill vẫn chạy; phần AgentKit thì không.",
+      "todo": "Xem kế hoạch bằng lệnh bên dưới (không tải gì), rồi chạy acp setup install-ak --apply.",
+      "glossary": [
+        "AgentKit"
+      ]
+    },
+    "ak_not_signed_in": {
+      "title": "Công cụ ak chưa đăng nhập",
+      "what": "ak đã được cài nhưng chưa đăng nhập vào tài khoản AgentKit.",
+      "why": "Chưa đăng nhập thì ak không tải được các bản AgentKit.",
+      "ignore": "Cài và cập nhật AgentKit sẽ thất bại.",
+      "todo": "Đăng nhập bằng API key của AgentKit ở mục AgentKit & Runtime trên trang acp hoặc trong ứng dụng acp; ở terminal thì đưa key vào acp setup login --api-key-stdin qua stdin.",
+      "glossary": [
+        "AgentKit"
+      ]
+    },
+    "ak_doctor_unhealthy": {
+      "title": "ak doctor báo có vấn đề",
+      "what": "Bài kiểm tra sức khỏe của ak (ak doctor) chưa đạt.",
+      "why": "ak có vấn đề thì việc cài hay cập nhật AgentKit có thể hỏng giữa chừng.",
+      "ignore": "Có thể gặp lỗi khi đồng bộ dự án.",
+      "todo": "Mở Terminal, chạy ak doctor để xem chi tiết và làm theo hướng dẫn của nó.",
+      "glossary": [
+        "AgentKit"
+      ]
+    },
+    "pin_missing": {
+      "title": "Chưa chọn phiên bản AgentKit {kit} cho kênh {channel}",
+      "what": "Có dự án dùng AgentKit {kit} ở kênh {channel}, nhưng tệp agentkit-releases.lock.json chưa ghi phiên bản nào.",
+      "why": "acp chỉ cài đúng phiên bản đã chọn; chưa chọn thì nó không cài.",
+      "ignore": "Các dự án ở kênh này không được cài hay cập nhật AgentKit.",
+      "todo": "Xem trước phiên bản mới nhất bằng lệnh bên dưới, rồi chạy acp upgrade.",
+      "glossary": [
+        "AgentKit",
+        "kênh Beta",
+        "kênh Stable"
+      ]
+    },
+    "hook_target_missing": {
+      "title": "Hook trỏ tới một tệp không còn",
+      "what": "Trong {file}, hook {event} chạy {target}, nhưng tệp đó không còn trên máy.",
+      "why": "Mỗi lần sự kiện xảy ra, hook sẽ báo lỗi hoặc không làm gì.",
+      "ignore": "Bạn sẽ tiếp tục thấy lỗi hook trong phiên làm việc.",
+      "todo": "Khôi phục tệp đó, hoặc mở {file} và xóa hook này.",
+      "glossary": [
+        "hook"
+      ]
+    },
+    "hook_duplicate": {
+      "title": "Một hook đang chạy hai lần",
+      "what": "Trong {file}, sự kiện {event} có hai hook làm cùng một việc: {command}.",
+      "why": "Việc đó chạy hai lần, tốn thời gian và có thể ghi trùng.",
+      "ignore": "Không hỏng gì, chỉ chậm hơn.",
+      "todo": "Mở {file} và giữ lại một bản của hook này.",
+      "glossary": [
+        "hook"
+      ]
+    },
+    "acp_hook_missing": {
+      "title": "Chưa cài hook tự gắn skill cho worktree",
+      "what": "{file} chưa có hook của acp chạy khi mở phiên mới.",
+      "why": "Thiếu hook này, worktree mới tạo sẽ không tự có skill.",
+      "ignore": "Mỗi worktree mới cần chạy acp link bằng tay.",
+      "todo": "Xem trước bằng lệnh bên dưới, rồi chạy acp hooks install (có bản sao lưu).",
+      "glossary": [
+        "hook",
+        "worktree",
+        "skill",
+        "bản sao lưu"
+      ]
+    },
+    "acp_hook_legacy": {
+      "title": "Hook của acp đang dùng bản Python cũ",
+      "what": "{file} vẫn gọi bản acp cũ viết bằng Python.",
+      "why": "Bản cũ sẽ bị gỡ; khi đó hook sẽ hỏng.",
+      "ignore": "Hook còn chạy cho tới khi bản Python bị gỡ.",
+      "todo": "Chạy acp hooks install để thay bằng hook của bản mới (có bản sao lưu).",
+      "glossary": [
+        "hook",
+        "bản sao lưu"
+      ]
+    },
+    "acp_hook_stale": {
+      "title": "Hook của acp trỏ tới một chương trình không còn",
+      "what": "{file} gọi acp ở {binary}, nhưng tệp đó không còn.",
+      "why": "Mỗi lần mở phiên, hook sẽ lỗi và worktree không được gắn skill.",
+      "ignore": "Worktree mới không tự có skill, và bạn thấy lỗi hook.",
+      "todo": "Chạy acp hooks install để trỏ hook về acp hiện tại (có bản sao lưu).",
+      "glossary": [
+        "hook",
+        "worktree"
+      ]
+    },
+    "mcp_command_missing": {
+      "title": "Máy chủ MCP {server} không chạy được",
+      "what": "Trong {source}, máy chủ MCP {server} cần chương trình {command}, nhưng không tìm thấy nó.",
+      "why": "Trợ lý sẽ không dùng được các công cụ của máy chủ này.",
+      "ignore": "Mỗi lần mở phiên có thể thấy báo lỗi kết nối MCP.",
+      "todo": "Cài lại chương trình {command}, hoặc gỡ máy chủ {server} khỏi cấu hình nếu không dùng nữa.",
+      "glossary": [
+        "MCP"
+      ]
+    },
+    "global_skill_drift": {
+      "title": "Skill dùng chung cho tài khoản chưa khớp với global-skills.json",
+      "what": "Có {count} thay đổi cần làm để thư mục skill trong tài khoản của bạn (~/.claude, ~/.codex, ...) đúng với global-skills.json.",
+      "why": "Skill dùng chung có ở mọi dự án; lệch thì trợ lý thiếu hoặc thừa skill.",
+      "ignore": "Lựa chọn trong global-skills.json chưa có hiệu lực.",
+      "todo": "Xem trước bằng lệnh bên dưới, rồi chạy acp global.",
+      "glossary": [
+        "skill"
+      ]
+    },
+    "skill_link_broken": {
+      "title": "Liên kết skill {skill} đã hỏng",
+      "what": "Trong {home}, skill {skill} là một liên kết trỏ tới nơi không còn tồn tại.",
+      "why": "Trợ lý có thể báo lỗi khi đọc danh sách skill.",
+      "ignore": "Skill này không dùng được.",
+      "todo": "Nếu có lệnh sửa bên dưới, chạy nó. Nếu không, hãy tự xóa liên kết {home}/{skill}.",
+      "glossary": [
+        "skill",
+        "liên kết"
+      ]
+    },
+    "skill_dir_without_skill_md": {
+      "title": "Thư mục {skill} không phải là skill",
+      "what": "Trong {home} có thư mục {skill} nhưng không có tệp SKILL.md.",
+      "why": "Trợ lý chỉ nhận một thư mục là skill khi có SKILL.md.",
+      "ignore": "Thư mục đó bị bỏ qua.",
+      "todo": "Thêm SKILL.md nếu đó là skill, hoặc chuyển thư mục đi chỗ khác.",
+      "glossary": [
+        "skill"
+      ]
+    },
+    "skill_copy_drift": {
+      "title": "{count} skill có bản sao khác nhau giữa các trợ lý",
+      "what": "Các skill {skills} có bản sao riêng ở {homes} và nội dung không giống nhau.",
+      "why": "Mỗi trợ lý dùng thư mục nào thì làm theo bản ở thư mục đó, nên cùng một skill sẽ chạy theo những cách khác nhau.",
+      "ignore": "Các trợ lý tiếp tục dùng những bản khác nhau; trợ lý giữ bản cũ sẽ không có thay đổi mới.",
+      "todo": "Nếu là skill AgentKit (tên bắt đầu bằng ak-), cập nhật AgentKit cho trợ lý đang giữ bản cũ. Nếu là skill của bạn, chọn một bản, đặt vào skills/ của control plane, khai báo trong global-skills.json rồi chạy acp global.",
+      "glossary": [
+        "skill",
+        "Claude Code",
+        "Codex"
+      ]
+    },
+    "plugin_runtime_unsupported": {
+      "title": "Plugin {plugin} của {project} khai báo chưa đúng",
+      "what": "Trong projects/{project}.json, plugin {plugin} ghi runtime {runtime}. acp chỉ quản plugin của Claude Code, tên theo dạng <plugin>@<marketplace>.",
+      "why": "Khai báo sai thì acp không biết cài hay kiểm tra plugin này, nên dự án có thể thiếu plugin mà bạn tưởng đã có.",
+      "ignore": "Plugin này bị bỏ qua ở mọi lần sync và scan.",
+      "todo": "Sửa mục plugins trong projects/{project}.json: runtime là claude và name có dạng <plugin>@<marketplace>, ví dụ pstack@cursor-plugins.",
+      "glossary": [
+        "plugin",
+        "Claude Code"
+      ]
+    },
+    "plugin_not_installed": {
+      "title": "Plugin {plugin} chưa được cài cho {project}",
+      "what": "Dự án {project} khai báo plugin {plugin}{pin_text}, nhưng Claude Code chưa ghi nhận bản cài nào ở phạm vi dự án cho thư mục {checkout}.",
+      "why": "Thiếu plugin thì trợ lý trong dự án không có các lệnh, skill và rule mà plugin mang theo.",
+      "ignore": "Trợ lý vẫn chạy, nhưng không có plugin {plugin}.",
+      "todo": "Mở terminal trong {checkout} rồi chạy: {command}. Hoặc chạy acp sync {project} ở control plane Python.",
+      "glossary": [
+        "plugin",
+        "Claude Code"
+      ]
+    },
+    "plugin_not_enabled": {
+      "title": "Plugin {plugin} của {project} chưa được bật",
+      "what": "Plugin {plugin} đã cài ở phạm vi dự án (bản {installed}), nhưng {settings} chưa bật nó (enabledPlugins).",
+      "why": "Plugin cài mà chưa bật thì Claude Code không nạp nó trong dự án này.",
+      "ignore": "Trợ lý trong {project} vẫn thiếu plugin {plugin}.",
+      "todo": "Mở terminal trong {checkout} rồi chạy: {command}.",
+      "glossary": [
+        "plugin",
+        "Claude Code"
+      ]
+    },
+    "plugin_version_drift": {
+      "title": "Plugin {plugin} của {project} chưa đúng phiên bản",
+      "what": "Dự án đang cài plugin {plugin} bản {installed}, còn projects/{project}.json ghim bản {pin}.",
+      "why": "Bản cài khác bản ghim thì máy khác hoặc phiên khác có thể chạy plugin khác bạn, khó biết lỗi đến từ đâu.",
+      "ignore": "Plugin vẫn chạy với bản {installed}; mốc ghim trong manifest không còn đúng.",
+      "todo": "Mở terminal trong {checkout} rồi chạy: {command}. Sau đó sửa version trong projects/{project}.json cho khớp bản vừa cài. acp không tự đổi phiên bản plugin.",
+      "glossary": [
+        "plugin",
+        "Claude Code"
+      ]
+    },
+    "plugin_user_scope_enabled": {
+      "title": "Plugin {plugin} còn bật cho cả máy",
+      "what": "Dự án {project} khai báo plugin {plugin} theo phạm vi dự án, nhưng {settings} vẫn bật nó ở phạm vi người dùng, tức mọi thư mục trên máy.",
+      "why": "Plugin bật cho cả máy sẽ nạp vào mọi dự án, kể cả dự án không khai báo, và có thể chạy bản khác với bản dự án ghim.",
+      "ignore": "Các dự án khác vẫn thấy plugin {plugin}; bản bật theo dự án và bản bật cho cả máy có thể lệch nhau.",
+      "todo": "Chạy: {command}. acp không tự tắt plugin ở phạm vi người dùng.",
+      "glossary": [
+        "plugin",
+        "Claude Code"
+      ]
+    },
+    "check_timed_out": {
+      "title": "Phần kiểm tra {check} chạy quá lâu",
+      "what": "Phần kiểm tra {check} không xong trong {seconds} giây nên đã được bỏ qua.",
+      "why": "Kết quả của phần này chưa có trong lần quét này.",
+      "ignore": "Có thể có vấn đề ở phần này mà bạn chưa thấy.",
+      "todo": "Quét lại sau. Nếu lần nào cũng chậm, kiểm tra xem máy hoặc ổ đĩa có đang bận không.",
+      "glossary": []
+    },
+    "check_failed": {
+      "title": "Phần kiểm tra {check} gặp lỗi",
+      "what": "Phần kiểm tra {check} dừng giữa chừng vì một lỗi của acp: {error}.",
+      "why": "Kết quả của phần này chưa có trong lần quét này; các phần khác vẫn được kiểm tra.",
+      "ignore": "Có thể có vấn đề ở phần này mà bạn chưa thấy.",
+      "todo": "Quét lại. Nếu lỗi lặp lại, báo lỗi kèm dòng này để acp được sửa.",
+      "glossary": []
+    }
+  },
+  "glossary": {
+    "AgentKit": "Bộ skill và agent dựng sẵn cho trợ lý AI, cài vào từng dự án bằng công cụ ak.",
+    "skill": "Một gói hướng dẫn (thư mục có SKILL.md) dạy trợ lý AI làm một việc cụ thể.",
+    "worktree": "Một bản làm việc phụ của cùng dự án, để làm nhiều nhánh cùng lúc mà không đụng nhau.",
+    "kênh Beta": "Bản chưa phát hành chính thức. Các tính năng mới nhất luôn có ở đây trước, nhưng có thể gặp một số lỗi khi sử dụng.",
+    "kênh Stable": "Bản phát hành chính thức, đã được kiểm tra kỹ hơn và ít thay đổi bất ngờ.",
+    "Claude Code": "Trợ lý lập trình AI của Anthropic, chạy trong Terminal hoặc ứng dụng.",
+    "Codex": "Trợ lý lập trình AI của OpenAI.",
+    "Git": "Công cụ lưu lịch sử thay đổi của mã nguồn.",
+    "commit": "Một lần lưu thay đổi vào lịch sử Git.",
+    "hook": "Một lệnh tự chạy khi có sự kiện, ví dụ khi bạn mở một phiên làm việc mới.",
+    "MCP": "Cách để trợ lý AI dùng thêm công cụ bên ngoài (Model Context Protocol).",
+    "bản sao lưu": "Bản chép lại trước khi thay đổi, cất trong runtime/backups để có thể lấy lại.",
+    "liên kết": "Một lối tắt (symlink) trỏ tới tệp hoặc thư mục ở nơi khác, nên không phải chép lại.",
+    "plugin": "Gói mở rộng của Claude Code (lệnh, skill, agent, hook, rule) lấy từ một marketplace; có thể bật cho cả máy (phạm vi người dùng) hoặc cho từng dự án."
+  }
+}
