@@ -53,7 +53,7 @@ func New(root *core.Root, version string, run core.Runner) *mcp.Server {
 	s := &server{root: root, run: run, cache: map[string]cached{}}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "acp", Version: version}, &mcp.ServerOptions{Instructions: instructions})
 	mcp.AddTool(srv, &mcp.Tool{Name: "acp_scan", Annotations: readOnly,
-		Description: "Health check of projects, worktrees, AgentKit, hooks, MCP servers and user skills. Each finding has a code, a severity, a plain-language explanation and, when one exists, the acp command that fixes it. Results are cached for 30 seconds."},
+		Description: "Health check of projects, worktrees, declared Claude Code plugins, AgentKit, hooks, MCP servers and user skills. Each finding has a code, a severity, a plain-language explanation and, when one exists, the acp command that fixes it. Results are cached for 30 seconds."},
 		s.scanTool)
 	mcp.AddTool(srv, &mcp.Tool{Name: "acp_status", Annotations: readOnly,
 		Description: "Fleet status: each project's AgentKit version, personal skill links and worktrees."},

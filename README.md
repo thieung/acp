@@ -131,6 +131,13 @@ This exclude applies to that worktree only:
 
 `acp scan` writes nothing. It checks each project, each worktree and the shared pieces (hooks, MCP servers, global skills, ak), with 20 seconds for each part. Each finding has a stable code, a severity (`error`, `warn`, `decide`, `info`) and four plain-language parts: what happened, why it matters, what happens if you ignore it, and what to do. A finding that acp can fix also carries the preview command.
 
+Plugins a manifest declares (`plugins: [{name: <plugin>@<marketplace>, runtime: claude, version, rules}]`)
+are checked against what Claude Code records: `~/.claude/plugins/installed_plugins.json` and the
+`enabledPlugins` of the main checkout's `.claude/settings.json` and of `~/.claude/settings.json`.
+The codes are `plugin_not_installed`, `plugin_not_enabled`, `plugin_version_drift`,
+`plugin_user_scope_enabled` and `plugin_runtime_unsupported`. Each carries the `claude plugin
+install|enable|update|disable` command a person runs; scan never runs `claude` itself.
+
 `acp web` listens on loopback only. The URL carries a one-time code, which the server exchanges for a bearer token, and it refuses unknown Host and Origin headers. A change goes through these steps:
 1. The server runs the preview and keeps a digest of its result.
 2. You apply only while that digest still matches.

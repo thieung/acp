@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `acp scan`, `acp explain` and the MCP tools `acp_scan`/`acp_explain` understand the manifest
+  key `plugins` (Claude Code plugins pinned per project). New codes `plugin_not_installed`,
+  `plugin_not_enabled`, `plugin_version_drift`, `plugin_user_scope_enabled` and
+  `plugin_runtime_unsupported` match the Python acp's `status` and `sync --dry-run`; each names
+  the `claude plugin ...` command to run. Scan only reads `installed_plugins.json` and the two
+  `settings.json` files.
 - New `acp new <path>`: create a folder (or git init an existing one, or take an existing repo),
   add it to the fleet, install AgentKit for `--runtimes` (default `claude`) and link personal
   skills from `project-defaults.json` plus `--skills`. When acp ran `git init`, the paths it and
