@@ -40,7 +40,9 @@ var contracts = []contract{
 	{name: "hooks", summary: "session-start hooks that link worktrees", mutation: true, risk: "low",
 		preview: "--dry-run (or the status action)"},
 	{name: "skills list", summary: "a project's AgentKit and personal skills with their catalogs"},
-	{name: "skills set", summary: "add or remove skills of a project", mutation: true, risk: "medium",
+	{name: "skills set", summary: "add or remove skills of a project; --preset sets AgentKit skills from " +
+		"comma-separated presets (all, minimal, continuity, pr, frontend, backend, pipeline, marketing), " +
+		"each in its own kit", mutation: true, risk: "medium",
 		preview: "default; preview until --apply", confirm: "--apply"},
 	{name: "kit add", summary: "give a project AgentKit; on a project that has it, --kit adds another kit " +
 		"(agentkit.extra_kits, sharing the channel and targets)", mutation: true, risk: "medium",
