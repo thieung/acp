@@ -14,7 +14,8 @@ import (
 // FakeAK stands in for the AgentKit CLI. `kit init|refresh` records the call in .ak-calls, writes
 // ak-cook (another kit than engineer writes <kit>-brief) and .claude/agents/planner.md for
 // claude-code, an install manifest and, like ak, the absolute paths of the files it claims in
-// native-skill-paths.json; it fails like ak when .agentkit/BROKEN exists, when .codex/hooks.json
+// native-skill-paths.json (the install manifest's skill_selection lists the --skills names, as ak's
+// does); it fails like ak when .agentkit/BROKEN exists, when .codex/hooks.json
 // is a symlink or when ak-cook is a symlink. Like ak with sibling kits, a second kit leaves an
 // existing planner.md alone but claims it too, and on codex every kit but a lone engineer writes
 // its name into the shared .codex/agents/planner.toml, the last writer winning
@@ -52,7 +53,8 @@ if [ "$1" = kit ] && { [ "$2" = init ] || [ "$2" = refresh ]; }; then
       --version) version=$2; shift ;;
       --fresh) fresh=" --fresh" ;;
       --exclude-skills) selection='{"mode":"list","skills":[]}'; shift ;;
-      --skills|--channel) shift ;;
+      --skills) selection='{"mode":"list","skills":["'$(printf %s "$2" | sed 's/,/","/g')'"]}'; shift ;;
+      --channel) shift ;;
     esac
     shift
   done

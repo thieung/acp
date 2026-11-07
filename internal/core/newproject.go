@@ -204,7 +204,36 @@ func (r *Root) ProjectDefaults() string { return filepath.Join(r.Dir, "project-d
 type NewDefaults struct {
 	Kit, Channel     string
 	Runtimes, Skills []string
-	File             string
+	// agentkit.skills is either AKPreset, a checked preset value such as "minimal,pr" that acp new
+	// resolves once it knows the kit, or AKSkills, a list of skill names. Neither set selects
+	// every skill of the kit.
+	AKPreset string
+	AKSkills []string
+	File     string
+}
+
+// akSkillsDefault reads agentkit.skills: a preset value ("all", "minimal", "minimal,pr", ...) or a
+// non-empty list of skill names.
+func akSkillsDefault(v any) (preset string, list []string, err error) {
+	if value, ok := v.(string); ok {
+		if _, err := ParsePresets(value); err != nil {
+			return "", nil, fmt.Errorf("%v, or give a list of skill names", err)
+		}
+		return value, nil, nil
+	}
+	list, err = stringArray(v)
+	if err != nil {
+		return "", nil, errors.New("must be a preset or a list of skill names")
+	}
+	if len(list) == 0 {
+		return "", nil, errors.New("is empty; use \"all\" for every skill")
+	}
+	for _, s := range list {
+		if !ValidName(s) {
+			return "", nil, fmt.Errorf("has an invalid skill name %q", s)
+		}
+	}
+	return "", list, nil
 }
 
 // LoadNewDefaults reads project-defaults.json strictly: a typo or a wrong type is an error, not a
@@ -240,6 +269,12 @@ func (r *Root) LoadNewDefaults() (NewDefaults, error) {
 			}
 			for _, ak2 := range ak.Keys() {
 				s, _ := ak.Get(ak2)
+				if ak2 == "skills" {
+					if d.AKPreset, d.AKSkills, err = akSkillsDefault(s); err != nil {
+						return bad("agentkit.skills %v", err)
+					}
+					continue
+				}
 				str, ok := s.(string)
 				switch {
 				case ak2 != "kit" && ak2 != "channel":

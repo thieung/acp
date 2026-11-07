@@ -39,6 +39,7 @@ acp explain <code>     # what a scan finding means and how to fix it
 acp web                # dashboard on 127.0.0.1:8780; every change is previewed first
 acp mcp                # MCP server over stdio: scan, status, explain, fix preview
 acp skills set <id> --add herdr --remove ak-shopify   # preview; add --apply to write
+acp skills set <id> --preset minimal,pr --apply   # a short list of AgentKit skills (see below)
 acp kit add <id> --apply
 acp kit add <id> --kit marketing --apply      # a second kit next to the project's kit
 acp kit remove <id> --kit marketing --apply   # uninstall it again
@@ -78,8 +79,10 @@ Defaults come from `project-defaults.json` in the control plane; flags win over 
 }
 ```
 
-Without the file acp uses `engineer`, `beta`, `claude` and no personal skills. A typo or a
-wrong type in the file is an error.
+Without the file acp uses `engineer`, `beta`, `claude`, every skill of the kit and no personal
+skills. `agentkit.skills` picks the kit's AgentKit skills for new projects: presets such as
+`"minimal,pr"` (see [Skill presets](#skill-presets)) or a list of skill names. A typo or a wrong
+type in the file is an error, and so is a preset made for another kit than the new project's.
 
 - No commit is made. When acp ran `git init`, it lists the paths AgentKit and acp created in a
   marked block of `.git/info/exclude`, so a first `git add -A` does not commit them. Files that
@@ -97,6 +100,43 @@ wrong type in the file is an error.
   later link themselves only with them.
 
 The dashboard has the same flow under "Tạo dự án mới".
+
+## Skill presets
+
+A full kit installs every skill it has, and each one's description sits in the agent's context.
+Presets install short lists of AgentKit skills instead. They cover AgentKit skills only;
+personal skills stay as the manifest's `skills` lists them. Combine presets with commas.
+
+| Preset | Kit | AgentKit skills |
+|---|---|---|
+| `minimal` | any | `ak-brainstorm`, `ak-plan`, `ak-cook`, `ak-test`, `ak-git`, `ak-fix`, `ak-debug`, `ak-scout`, `ak-vault` |
+| `continuity` | any | `ak-journal`, `ak-handoff`, `ak-watzup`, `ak-sumup` |
+| `pr` | engineer | `ak-code-review`, `ak-review-pr`, `ak-ship` |
+| `frontend` | engineer | `ak-frontend-design`, `ak-ui-styling`, `ak-web-testing`, `ak-agent-browser` |
+| `backend` | engineer | `ak-backend-development`, `ak-databases`, `ak-security`, `ak-deploy` |
+| `pipeline` | engineer | `ak-vibe`, `ak-worktree`, `ak-docs`, `ak-research` and the `pr` skills |
+| `marketing` | marketing | `ak-copywriting`, `ak-content-marketing`, `ak-seo`, `ak-social`, `ak-campaign`, `ak-marketing-planning`, `ak-marketing-research` |
+| `all` | | every skill of the primary kit (the default); not combined with others |
+
+```bash
+acp skills set <id> --preset minimal                        # preview the manifest diff and the sync
+acp skills set <id> --preset minimal,pr --apply             # everyday coding through pull requests
+acp skills set <id> --preset minimal,pr,frontend --apply    # plus UI work
+acp skills set <id> --preset minimal,pipeline --apply       # issue to PR with ak-vibe
+acp skills set <id> --preset minimal,continuity --add ak-docs --apply   # presets plus one skill
+acp skills set <id> --add ak-tanstack --apply               # add one later; the list stays
+acp skills set <id> --preset all --apply                    # back to the whole kit
+```
+
+- `any` presets hold only the core skills every kit ships, so they go to the primary kit. A kit's
+  preset goes to that kit, primary or added with `acp kit add`; acp refuses it when the project
+  does not use the kit.
+- A kit a preset reaches gets the presets' list as its whole `skills`, and its `exclude` goes;
+  `--add` and `--remove` in the same call then edit that list. Kits no preset reaches keep their
+  selection, and `all` resets the primary kit only.
+- `acp sync` reinstalls a kit with `ak kit init <kit> --fresh --skills <list>` when its list
+  changes, and `acp upgrade` keeps the list. ak takes the names with the `ak-` prefix.
+- The agents, rules and hooks of the kit are installed either way; a preset narrows the skills only.
 
 ## Several kits in one project
 

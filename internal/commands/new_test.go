@@ -4,9 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/thieung/acp/internal/core"
 	"github.com/thieung/acp/internal/testkit"
 )
 
@@ -106,6 +108,33 @@ func TestNewSettingsPrecedence(t *testing.T) {
 		if got := m["skills"].([]any)[0].(map[string]any)["runtimes"]; !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: personal runtimes %v", c.args, got)
 		}
+	}
+}
+
+func TestNewTakesAgentKitSkillsFromDefaults(t *testing.T) {
+	f := testkit.New(t)
+	f.Write(filepath.Join(f.CP, "project-defaults.json"),
+		`{"schemaVersion": 1, "agentkit": {"kit": "engineer", "skills": "minimal,pr"}}`)
+	foo := filepath.Join(f.Home, "foo")
+	r := mustOK(t, acp(t, f, "", "new", foo, "--dry-run"))
+	if !strings.Contains(r.stdout, ": ak-brainstorm, ak-code-review, ak-cook,") {
+		t.Fatalf("dry run does not name the skills:\n%s", r.stdout)
+	}
+	mustOK(t, acp(t, f, "", "new", foo))
+	want := core.PresetSkills([]string{"minimal", "pr"}, "engineer")["engineer"]
+	ak := readMap(t, filepath.Join(f.CP, "projects/foo.json"))["agentkit"].(map[string]any)
+	if got := toStrings(ak["skills"]); !slices.Equal(got, want) {
+		t.Fatalf("agentkit.skills %v", ak["skills"])
+	}
+	m := readMap(t, filepath.Join(foo, ".agentkit/adapters/claude-code/engineer/.agentkit/install-manifest.json"))
+	if sel := m["skill_selection"].(map[string]any); sel["mode"] != "list" || len(sel["skills"].([]any)) != len(want) {
+		t.Fatalf("ak was not given the list: %v", sel)
+	}
+	// A preset made for another kit than the new project's is refused before anything is written.
+	bar := filepath.Join(f.Home, "bar")
+	if r := acp(t, f, "", "new", bar, "--kit", "marketing", "--dry-run"); r.code != 1 ||
+		!strings.Contains(r.stderr, "pr needs the engineer kit, not marketing") {
+		t.Fatalf("pr on a marketing project: %d %q", r.code, r.stderr)
 	}
 }
 

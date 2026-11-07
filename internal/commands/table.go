@@ -3,6 +3,9 @@ package commands
 import (
 	"fmt"
 	"io"
+	"strings"
+
+	"github.com/thieung/acp/internal/core"
 )
 
 const overview = `acp: see and sync agent skills across your projects.
@@ -106,7 +109,10 @@ func init() {
 				{name: "settings", kind: listFlag, meta: "PATH", help: "also this Claude settings file (repeatable)"}}, run: cmdHooks},
 		{name: "skills", help: "show or change a project's skills", action: true,
 			pos: []posSpec{{name: "action", choices: []string{"list", "set"}}, {name: "id", help: "project id"}},
-			flags: []flagSpec{{name: "add", kind: strFlag, help: "comma-separated skill names"},
+			flags: []flagSpec{{name: "preset", kind: strFlag, meta: "LIST",
+				help: "AgentKit skills from comma-separated presets (" + strings.Join(core.PresetNames(), ", ") +
+					"), e.g. minimal,pr; --add and --remove then edit the list"},
+				{name: "add", kind: strFlag, help: "comma-separated skill names"},
 				{name: "remove", kind: strFlag, help: "comma-separated skill names"},
 				{name: "runtimes", kind: strFlag, help: "personal skills only: claude,codex (default: the project's targets)"},
 				apply, noFix}, run: cmdSkills},

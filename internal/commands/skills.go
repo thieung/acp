@@ -2,7 +2,9 @@ package commands
 
 import (
 	"context"
+	"maps"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -77,13 +79,39 @@ func without(list []string, name string) []string {
 	return out
 }
 
-// editSkills returns a copy of the manifest with skills added and removed; nothing is written.
-func editSkills(eng *core.Engine, root *core.Root, p *core.Project, add, remove, runtimes []string) (*core.Object, error) {
+// editSkills returns a copy of the manifest with presets applied, then skills added and removed;
+// nothing is written. Each preset goes to its kit: the core presets to the primary kit, a kit's
+// preset to that kit, primary or added. A kit a preset reaches gets the presets' list as its whole
+// selection, without exclusions, so --add and --remove edit that list; "all" resets the primary
+// kit. Kits no preset reaches keep their selection.
+func editSkills(eng *core.Engine, root *core.Root, p *core.Project, presets, add, remove, runtimes []string) (*core.Object, error) {
 	manifest := core.Clone(p.Manifest).(*core.Object)
 	// Kit entries of the copy, so edits land in it and not in p.Manifest.
 	entries := map[string]*core.Object{}
 	for _, k := range (&core.Project{ID: p.ID, Manifest: manifest}).Kits() {
 		entries[k.Name] = k.Entry
+	}
+	if len(presets) > 0 {
+		if p.AK() == nil {
+			return nil, fail("%s does not use AgentKit; give it AgentKit with `acp kit add %s` first", p.ID, p.ID)
+		}
+		byKit := core.PresetSkills(presets, p.Kit())
+		if byKit == nil {
+			byKit = map[string][]string{p.Kit(): nil}
+		}
+		for _, kit := range slices.Sorted(maps.Keys(byKit)) {
+			ak := entries[kit]
+			if ak == nil {
+				return nil, fail("preset %s needs AgentKit %s, which %s does not use (add it with `acp kit add %s --kit %s`)",
+					core.PresetFor(presets, kit), kit, p.ID, p.ID, kit)
+			}
+			if list := byKit[kit]; list == nil {
+				ak.Set("skills", core.AllSkills)
+			} else {
+				ak.Set("skills", core.AnyList(list))
+			}
+			ak.Delete("exclude")
+		}
 	}
 	if !manifest.Has("skills") {
 		manifest.Set("skills", []any{})
@@ -269,8 +297,14 @@ func cmdSkills(e *Env, a *Args) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if len(add) == 0 && len(remove) == 0 {
-			return 0, usageErr("pass --add and/or --remove")
+		var presets []string
+		if a.Given("preset") {
+			if presets, err = core.ParsePresets(a.Str("preset")); err != nil {
+				return 0, usageErr("%v", err)
+			}
+		}
+		if len(add) == 0 && len(remove) == 0 && len(presets) == 0 {
+			return 0, usageErr("pass --preset, --add and/or --remove")
 		}
 		runtimes, err := names(a.Str("runtimes"))
 		if err != nil {
@@ -284,7 +318,7 @@ func cmdSkills(e *Env, a *Args) (int, error) {
 		if len(runtimes) == 0 {
 			runtimes = defaultRuntimes(p)
 		}
-		manifest, err := editSkills(eng, root, p, add, remove, runtimes)
+		manifest, err := editSkills(eng, root, p, presets, add, remove, runtimes)
 		if err != nil {
 			return 0, err
 		}
