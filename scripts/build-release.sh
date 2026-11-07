@@ -10,6 +10,9 @@ case $tag in
 esac
 version=${tag#v}
 root=$(cd "$(dirname "$0")/.." && pwd)
+# Use the go that owns GOROOT when a version manager left another go first on PATH.
+. "$root/scripts/lib/use-goroot-go.sh"
+use_goroot_go build-release
 dist=$root/dist
 rm -rf "$dist"
 mkdir -p "$dist"

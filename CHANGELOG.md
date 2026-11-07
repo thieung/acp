@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `scripts/build-release.sh` and `scripts/build-desktop.sh` run on their own with a version
+  manager's `GOROOT` while another go is first on `PATH`: like `scripts/verify.sh`, they switch to
+  the go that owns `GOROOT` instead of failing with "compile: version X does not match go tool
+  version Y". The three share `scripts/lib/use-goroot-go.sh`.
 - `acp scan`, `acp explain` and the MCP tools `acp_scan`/`acp_explain` understand the manifest
   key `plugins` (Claude Code plugins pinned per project). New codes `plugin_not_installed`,
   `plugin_not_enabled`, `plugin_version_drift`, `plugin_user_scope_enabled` and
