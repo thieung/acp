@@ -33,15 +33,10 @@ tag=v0.0.0-verify
 fail() { echo "verify: $*" >&2; exit 1; }
 [ "$(uname -s)" = Darwin ] || desktop=
 
-# A GOROOT exported by a version manager while another go is first on PATH makes every build fail
-# with "compile: version X does not match go tool version Y". Use the go that owns that GOROOT.
 command -v go >/dev/null 2>&1 || fail "go is not on PATH"
-goroot=$(go env GOROOT)
-if [ -x "$goroot/bin/go" ] && [ "$("$goroot/bin/go" env GOVERSION)" != "$(go env GOVERSION)" ]; then
-  echo "verify: $(command -v go) is $(go env GOVERSION) but GOROOT is $goroot; using $goroot/bin/go" >&2
-  PATH=$goroot/bin:$PATH
-  export PATH
-fi
+# Use the go that owns GOROOT when a version manager left another go first on PATH.
+. "$root/scripts/lib/use-goroot-go.sh"
+use_goroot_go verify
 if [ -n "$linux" ]; then
   docker info >/dev/null 2>&1 || fail "Docker is not running: start it (OrbStack, Docker Desktop) or pass --skip-linux"
 fi
