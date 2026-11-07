@@ -10,7 +10,7 @@ set -eu
 
 root=$(git rev-parse --show-toplevel)
 stamp=$(git rev-parse --path-format=absolute --git-common-dir)/acp-verified
-desktop_paths='^(desktop/|scripts/build-desktop\.sh$|scripts/bundle-version\.sh$|scripts/tests/desktop-smoke\.sh$|internal/|cmd/|go\.(mod|sum)$)'
+desktop_paths='^(desktop/|scripts/build-desktop\.sh$|scripts/bundle-version\.sh$|scripts/lib/|scripts/tests/desktop-smoke\.sh$|internal/|cmd/|go\.(mod|sum)$)'
 
 todo=
 while read -r _ local_sha _ remote_sha; do
