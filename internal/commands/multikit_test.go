@@ -130,3 +130,37 @@ func TestSkillsSetEditsTheKitThatOwnsTheSkill(t *testing.T) {
 		t.Fatalf("agentkit %v", ak)
 	}
 }
+
+// TestSkillsSetPresetsGoToTheirKits sends the core presets to the primary kit and a kit's preset to
+// that kit, added or not, and refuses a preset for a kit the project does not use.
+func TestSkillsSetPresetsGoToTheirKits(t *testing.T) {
+	f := testkit.New(t)
+	f.Write(filepath.Join(f.CP, "agentkit-releases.lock.json"),
+		`{"schemaVersion": 2, "channels": {"beta": {"engineer": "3.0.0-beta.36", "marketing": "3.0.0-beta.36"}}}`)
+	f.Manifest("demo", `{"id": "demo", "skills": [], "agentkit": {"kit": "engineer", "channel": "beta",
+  "targets": ["claude-code"], "skills": "all", "extra_kits": [{"kit": "marketing", "skills": "all", "exclude": ["mk-seo"]}]}}`)
+	mustOK(t, acp(t, f, "", "skills", "set", "demo", "--preset", "minimal,marketing"))
+	r := mustOK(t, acp(t, f, "", "skills", "set", "demo", "--preset", "minimal,marketing", "--apply"))
+	ak := readMap(t, filepath.Join(f.CP, "projects/demo.json"))["agentkit"].(map[string]any)
+	extra := ak["extra_kits"].([]any)[0].(map[string]any)
+	primary, added := strings.Join(toStrings(ak["skills"]), ","), strings.Join(toStrings(extra["skills"]), ",")
+	if !strings.Contains(primary, "ak-vault") || strings.Contains(primary, "ak-seo") ||
+		!strings.Contains(added, "ak-seo") || strings.Contains(added, "ak-vault") || extra["exclude"] != nil {
+		t.Fatalf("engineer %s, marketing %s, exclude %v\n%s", primary, added, extra["exclude"], r.stdout)
+	}
+	// The primary kit alone: "all" resets it and leaves the added kit's list.
+	mustOK(t, acp(t, f, "", "skills", "set", "demo", "--preset", "all", "--apply"))
+	ak = readMap(t, filepath.Join(f.CP, "projects/demo.json"))["agentkit"].(map[string]any)
+	if ak["skills"] != "all" || strings.Join(toStrings(ak["extra_kits"].([]any)[0].(map[string]any)["skills"]), ",") != added {
+		t.Fatalf("after all: %v", ak)
+	}
+
+	solo := testkit.New(t)
+	if r := acp(t, solo, "", "skills", "set", "demo", "--preset", "minimal,marketing"); r.code != 1 ||
+		!strings.Contains(r.stderr, "preset marketing needs AgentKit marketing, which demo does not use") {
+		t.Fatalf("marketing preset on an engineer-only project: %d %q", r.code, r.stderr)
+	}
+	if r := acp(t, solo, "", "skills", "set", "demo", "--preset", "all,minimal"); r.code != 2 {
+		t.Fatalf("all combined with a list: %d %q", r.code, r.stderr)
+	}
+}

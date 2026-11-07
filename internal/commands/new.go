@@ -16,7 +16,8 @@ type newSettings struct {
 	runtimes     []string // in core.Runtimes order
 	targets      []string
 	skills       []string
-	defaults     string // project-defaults.json when it set anything, else ""
+	akSkills     []string // AgentKit skills of the kit; nil selects all
+	defaults     string   // project-defaults.json when it set anything, else ""
 }
 
 func newChoices(root *core.Root, a *Args) (newSettings, error) {
@@ -24,7 +25,7 @@ func newChoices(root *core.Root, a *Args) (newSettings, error) {
 	if err != nil {
 		return newSettings{}, err
 	}
-	s := newSettings{kit: a.Str("kit"), channel: a.Str("channel"), defaults: d.File}
+	s := newSettings{kit: a.Str("kit"), channel: a.Str("channel"), akSkills: d.AKSkills, defaults: d.File}
 	if !a.Given("kit") && d.Kit != "" {
 		s.kit = d.Kit
 	}
@@ -57,6 +58,16 @@ func newChoices(root *core.Root, a *Args) (newSettings, error) {
 	if s.channel != "stable" && s.channel != "beta" {
 		return newSettings{}, usageErr("--channel must be stable or beta, not %q", s.channel)
 	}
+	if d.AKPreset != "" {
+		// Resolved against the final kit, so --kit and a kit-specific preset are checked together.
+		all, list, err := core.ResolvePresets(d.AKPreset, s.kit)
+		if err != nil {
+			return newSettings{}, fail("%s: agentkit.skills: %v", d.File, err)
+		}
+		if !all {
+			s.akSkills = list
+		}
+	}
 	for _, name := range append(slices.Clone(d.Skills), splitList(a.Str("skills"))...) {
 		if slices.Contains(s.skills, name) {
 			continue
@@ -87,8 +98,12 @@ func (s newSettings) manifest(id string) *core.Object {
 	for _, name := range s.skills {
 		skills = append(skills, core.Obj("name", name, "runtimes", core.AnyList(s.runtimes)))
 	}
+	var akSkills any = core.AllSkills
+	if s.akSkills != nil {
+		akSkills = core.AnyList(s.akSkills)
+	}
 	return core.Obj("id", id, "skills", skills, "agentkit", core.Obj("kit", s.kit, "channel", s.channel,
-		"targets", core.AnyList(s.targets), "skills", "all"))
+		"targets", core.AnyList(s.targets), "skills", akSkills))
 }
 
 // savedChoices are the settings of a project acp new started: a resumed run finishes what the
@@ -99,6 +114,9 @@ func savedChoices(root *core.Root, id string, a *Args) (newSettings, error) {
 		return newSettings{}, err
 	}
 	s := newSettings{kit: p.Kit(), channel: p.Channel()}
+	if all, list := p.AKSkills(); !all {
+		s.akSkills = list
+	}
 	for _, t := range p.AKTargets() {
 		s.targets, s.runtimes = append(s.targets, t), append(s.runtimes, core.Targets[t])
 	}
@@ -411,8 +429,12 @@ func newPlanLog(root *core.Root, s newSettings, np core.NewPath, id, pin string,
 	case noSync:
 		log.Change("~ --no-sync: AgentKit and links wait for `acp sync %s`", id)
 	default:
+		only := ""
+		if s.akSkills != nil {
+			only = ": " + strings.Join(s.akSkills, ", ")
+		}
 		for _, t := range s.targets {
-			log.Change("+ AgentKit %s %s (%s)", s.kit, pin, t)
+			log.Change("+ AgentKit %s %s (%s)%s", s.kit, pin, t, only)
 		}
 		for _, r := range s.runtimes {
 			for _, name := range s.skills {

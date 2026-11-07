@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -61,6 +62,66 @@ func TestSkillsSetPreviewsThenApplies(t *testing.T) {
 	r := mustOK(t, acp(t, f, "", "skills", "set", "demo", "--add", "extra"))
 	if !strings.Contains(r.stdout, "nothing to change") {
 		t.Fatalf("no-op set:\n%s", r.stdout)
+	}
+}
+
+func TestSkillsSetPresetSelectsAListThenAll(t *testing.T) {
+	f := testkit.New(t)
+	mustOK(t, acp(t, f, "", "sync", "--all"))
+	manifest := filepath.Join(f.CP, "projects/demo.json")
+	ak := func() map[string]any { return readMap(t, manifest)["agentkit"].(map[string]any) }
+	installed := func() any {
+		m := readMap(t, filepath.Join(f.Repo, ".agentkit/adapters/claude-code/engineer/.agentkit/install-manifest.json"))
+		return m["skill_selection"]
+	}
+	// An exclusion left from "all" mode goes away: the preset is the whole selection.
+	mustOK(t, acp(t, f, "", "skills", "set", "demo", "--remove", "ak-cook", "--apply"))
+	before := f.Read(manifest)
+	if r := mustOK(t, acp(t, f, "", "skills", "set", "demo", "--preset", "minimal")); f.Read(manifest) != before ||
+		!strings.Contains(r.stdout, `"ak-brainstorm",`) {
+		t.Fatalf("preview wrote the manifest or shows no list:\n%s", r.stdout)
+	}
+	minimal := []any{"ak-brainstorm", "ak-cook", "ak-debug", "ak-fix", "ak-git", "ak-plan", "ak-scout", "ak-test", "ak-vault"}
+	mustOK(t, acp(t, f, "", "skills", "set", "demo", "--preset", "minimal", "--apply"))
+	if got := ak(); !reflect.DeepEqual(got["skills"], minimal) || got["exclude"] != nil {
+		t.Fatalf("agentkit %v", got)
+	}
+	want := map[string]any{"mode": "list", "skills": minimal}
+	if got := installed(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("ak was not given the list: %v", got)
+	}
+	if r := acp(t, f, "", "doctor"); r.code != 0 {
+		t.Fatalf("doctor after a preset:\n%s", r.stdout)
+	}
+	// Presets combine, and --add and --remove edit their list in the same call.
+	mustOK(t, acp(t, f, "", "skills", "set", "demo", "--preset", "minimal,pr", "--remove", "ak-ship",
+		"--add", "ak-docs", "--apply"))
+	got := toStrings(ak()["skills"])
+	if !slices.IsSorted(got) || !slices.Contains(got, "ak-vault") || !slices.Contains(got, "ak-docs") ||
+		!slices.Contains(got, "ak-code-review") || slices.Contains(got, "ak-ship") {
+		t.Fatalf("minimal,pr with edits: %v", got)
+	}
+	mustOK(t, acp(t, f, "", "skills", "set", "demo", "--preset", "all", "--apply"))
+	if got := ak()["skills"]; got != "all" {
+		t.Fatalf("all: %v", got)
+	}
+	if got := installed(); !reflect.DeepEqual(got, map[string]any{"mode": "all"}) {
+		t.Fatalf("ak was not asked for every skill: %v", got)
+	}
+}
+
+func TestSkillsSetPresetNeedsAgentKitAndAKnownName(t *testing.T) {
+	f := testkit.New(t)
+	bare := filepath.Join(f.Base, "bare")
+	os.MkdirAll(bare, 0o755)
+	f.Manifest("bare", `{"id": "bare", "skills": []}`)
+	f.Overlay(map[string]string{"demo": f.Repo, "bare": bare})
+	if r := acp(t, f, "", "skills", "set", "bare", "--preset", "minimal"); r.code != 1 ||
+		!strings.Contains(r.stderr, "does not use AgentKit") {
+		t.Fatalf("preset on a project without AgentKit: %d %q", r.code, r.stderr)
+	}
+	if r := acp(t, f, "", "skills", "set", "demo", "--preset", "tiny"); r.code != 2 {
+		t.Fatalf("unknown preset: %d %q", r.code, r.stderr)
 	}
 }
 

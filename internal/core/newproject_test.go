@@ -170,10 +170,27 @@ func TestLoadNewDefaults(t *testing.T) {
   "runtimes": ["codex"], "skills": ["herdr"]}`)
 	d, err = f.root.LoadNewDefaults()
 	if err != nil || d.File != file || d.Kit != "marketing" || d.Channel != "stable" ||
-		!slices.Equal(d.Runtimes, []string{"codex"}) || !slices.Equal(d.Skills, []string{"herdr"}) {
+		!slices.Equal(d.Runtimes, []string{"codex"}) || !slices.Equal(d.Skills, []string{"herdr"}) || d.AKSkills != nil {
 		t.Fatalf("valid file: %+v %v", d, err)
 	}
+	for body, want := range map[string]NewDefaults{
+		`{"schemaVersion": 1, "agentkit": {"skills": "all"}}`:                  {AKPreset: "all"},
+		`{"schemaVersion": 1, "agentkit": {"skills": "minimal,pr"}}`:           {AKPreset: "minimal,pr"},
+		`{"schemaVersion": 1, "agentkit": {"skills": ["ak-plan", "ak-cook"]}}`: {AKSkills: []string{"ak-plan", "ak-cook"}},
+	} {
+		f.write(file, body)
+		if d, err = f.root.LoadNewDefaults(); err != nil || d.AKPreset != want.AKPreset || !slices.Equal(d.AKSkills, want.AKSkills) {
+			t.Errorf("%s: %q %v %v", body, d.AKPreset, d.AKSkills, err)
+		}
+	}
 	for _, body := range []string{
+		`{"schemaVersion": 1, "agentkit": {"skills": "tiny"}}`,
+		`{"schemaVersion": 1, "agentkit": {"skills": "all,minimal"}}`,
+		`{"schemaVersion": 1, "agentkit": {"skills": ""}}`,
+		`{"schemaVersion": 1, "agentkit": {"skills": []}}`,
+		`{"schemaVersion": 1, "agentkit": {"skills": ["ak-plan", 1]}}`,
+		`{"schemaVersion": 1, "agentkit": {"skills": ["../x"]}}`,
+		`{"schemaVersion": 1, "agentkit": {"skills": 3}}`,
 		`{"runtimes": ["claude"]}`,
 		`{"schemaVersion": 2}`,
 		`{"schemaVersion": 1, "extra": 1}`,

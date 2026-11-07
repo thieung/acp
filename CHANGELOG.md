@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Skill presets for AgentKit skills. `acp skills set <id> --preset minimal,pr` installs short,
+  combinable lists instead of a whole kit: `minimal` (brainstorm, plan, cook, test, git, fix,
+  debug, scout, vault) and `continuity` (journal, handoff, watzup, sumup) for any kit; `pr`,
+  `frontend`, `backend` and `pipeline` for engineer; `marketing` for marketing. `all` brings
+  the primary kit back. Each preset goes to its kit, an added kit included, and acp refuses a
+  preset for a kit the project does not use. `--add` and `--remove` in the same call edit the
+  list. `project-defaults.json` takes `agentkit.skills` (presets or a list of skill names), so
+  `acp new` can start projects with a short list; its dry run names the skills.
+- `scripts/build-release.sh` and `scripts/build-desktop.sh` run on their own with a version
+  manager's `GOROOT` while another go is first on `PATH`: like `scripts/verify.sh`, they switch to
+  the go that owns `GOROOT` instead of failing with "compile: version X does not match go tool
+  version Y". The three share `scripts/lib/use-goroot-go.sh`.
+
+## 0.2.0-beta.1 — 2026-11-04
+
 - `acp scan`, `acp explain` and the MCP tools `acp_scan`/`acp_explain` understand the manifest
   key `plugins` (Claude Code plugins pinned per project). New codes `plugin_not_installed`,
   `plugin_not_enabled`, `plugin_version_drift`, `plugin_user_scope_enabled` and
@@ -59,7 +74,6 @@
 - `acp web --exit-with-parent` stops when stdin closes. acp refuses to wire hooks, links or MCP
   to a binary on a path that vanishes (temp builds, disk images, App Translocation).
   `install.sh` leaves a link to `acp.app`'s binary alone.
-
 - acp is now a single Go binary for macOS and Linux (arm64, amd64), replacing the Python
   package. It installs from GitHub Releases through `install.sh`, which checks sha256.
 - New `acp scan` and `acp explain`: a read-only health check with stable finding codes,

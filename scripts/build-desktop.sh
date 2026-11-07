@@ -25,6 +25,9 @@ out=$root/dist/desktop
 fail() { echo "build-desktop: $*" >&2; exit 1; }
 
 [ "$(uname -s)" = Darwin ] || fail "the app builds on macOS only"
+# Use the go that owns GOROOT when a version manager left another go first on PATH.
+. "$root/scripts/lib/use-goroot-go.sh"
+use_goroot_go build-desktop
 feed=${ACP_SPARKLE_FEED_URL:-}
 pubkey=${ACP_SPARKLE_PUBLIC_KEY:-}
 if { [ -n "$feed" ] && [ -z "$pubkey" ]; } || { [ -z "$feed" ] && [ -n "$pubkey" ]; }; then
